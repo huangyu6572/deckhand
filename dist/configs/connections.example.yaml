@@ -1,0 +1,28 @@
+# 复制到 %LOCALAPPDATA%\LocalAIHub\connections.yaml 后修改。
+# 不要写入密码、token 或私钥正文。
+# 字段说明见上一级目录「配置说明.md」。
+
+targets:
+  # 内网 SSH，用本机 ssh-agent
+  dev-web:
+    transport: ssh
+    host: 192.168.1.20
+    user: devops
+    auth:
+      type: ssh-agent
+
+  # 私钥文件（只写路径）
+  test-web:
+    transport: ssh
+    host: 192.168.1.21
+    user: deploy
+    auth:
+      type: private-key
+      key_path: C:\Users\me\.ssh\id_ed25519
+
+  # 本机串口
+  board-01:
+    transport: serial
+    port: COM3
+    baud_rate: 115200
+    prompt_pattern: ">"

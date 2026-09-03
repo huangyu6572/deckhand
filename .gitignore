@@ -1,0 +1,10 @@
+/bin/
+/*.exe
+/dist/*.exe
+/product/*.exe
+/*.exe~
+*.test
+*.out
+.idea/
+.vscode/
+data/

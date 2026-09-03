@@ -1,0 +1,26 @@
+# 复制到 %LOCALAPPDATA%\LocalAIHub\settings.yaml 后按需修改。
+# 默认即内网便捷：日常不改也能用。
+
+network:
+  scope: intranet # intranet | all
+
+ssh:
+  host_key: accept-new-intranet
+
+daemon:
+  idle_exit: 0
+
+limits:
+  max_response_bytes: 8388608
+  max_event_bytes: 262144
+  max_operation_log_bytes: 104857600
+  max_total_log_bytes: 1073741824
+  max_concurrent_jobs: 32
+  matcher_max_bytes: 65536
+  pipe_max_frame_bytes: 16777216
+
+connection:
+  idle_timeout: 30m
+
+log:
+  retain_days: 30

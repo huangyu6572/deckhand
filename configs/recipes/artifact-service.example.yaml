@@ -1,0 +1,18 @@
+# 复制到 %LOCALAPPDATA%\LocalAIHub\recipes\artifact-service.yaml
+# 配合: hub deploy test-web --recipe artifact-service --artifact ./app.tar.gz
+
+name: artifact-service
+precheck:
+  - "test -d /opt/app"
+upload:
+  remote_dir: /opt/app
+  remote_name: app.tar.gz
+apply:
+  - "tar -xzf /opt/app/app.tar.gz -C /opt/app"
+  - "systemctl restart myapp"
+verify:
+  type: command
+  command: "systemctl is-active myapp"
+  timeout: 30s
+rollback:
+  - "systemctl restart myapp"
