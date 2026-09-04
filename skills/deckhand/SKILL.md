@@ -32,7 +32,8 @@ In order: `connections.yaml` name, then exact `~/.ssh/config` `Host`, then `user
 
 Rules:
 
-- `run` requires `--` before the remote command.
+- `run` requires `--` before the remote command, or `--script-file <local>` plus `--shell bash` (Linux) / `--shell powershell` (Windows remote).
+- Do not put `&&`, `$?`, `2>&1`, or `bash -c "..."` in PowerShell argv. If hub reports the command was rewritten, write a local `.sh`/`.ps1` and pass `--script-file`.
 - Never pass `--password` (exit 2). Passwords: yaml `auth.type: password` then `hub secret set <name>`.
 - Commands that may contain secrets: add `--sensitive`.
 - Long jobs: `--detach`, then `hub job wait --json <id>`.

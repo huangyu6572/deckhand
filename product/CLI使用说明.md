@@ -12,6 +12,14 @@ hub <动词> [对象] [参数] [--] [发给远端的内容...]
 
 `--` 之后原样发给远端，Hub 不会再包一层 `bash -lc`。
 
+在 Windows PowerShell 里不要把复杂脚本塞进 `bash -c "..."`：`$?`、`2>&1`、`&&` 会被本机吃掉。改用本地文件（正文不经过 PowerShell）：
+
+```text
+hub run --json --allow-public --script-file .\deploy.sh --shell bash cloud-172
+```
+
+`--shell bash` 在 Go 里把脚本编成 `base64 | bash -s` 再发给 Linux；Windows 远端用 `--shell powershell`。简单命令仍用 `hub run --json <目标> -- uname -a`。
+
 **禁止**在 argv 里写 `--password`（退出码 2）。密码用 `hub secret set`。
 
 ## 给 AI 的默认命令（优先用这些）

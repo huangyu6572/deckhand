@@ -33,8 +33,8 @@ hub run [flags] <target> -- <command...>
 | `--timeout` | 否 | 默认 Target `default_timeout` 否则 120s |
 | `--detach` | 否 | 立即返回，`status=running` |
 | `--sensitive` | 否 | 不把 command 写入 request 正文 |
-| `--cwd` | 否 | V1 **不支持** |
-| `--env` | 否 | V1 **不支持** |
+| `--script-file` | 否 | 本地脚本路径；用文件正文作为远端命令，避免 PowerShell 改写 |
+| `--shell` | 否 | `bash` / `sh` / `powershell` / `pwsh` / `raw`。空：看 shebang，否则 raw |
 
 IPC `Job.Run` params：
 

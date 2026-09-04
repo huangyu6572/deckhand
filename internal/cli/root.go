@@ -72,29 +72,33 @@ func Root() *cobra.Command {
 	})
 
 	var g globals
+	var scriptFile, runShell string
 
 	run := &cobra.Command{
-		Use:   "run [flags] <target> -- <command...>",
+		Use:   "run [flags] <target> [--script-file <path>] [--shell bash|powershell|pwsh|raw] [-- <command...>]",
 		Short: "Run a remote SSH command",
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if timeoutMS(&g) < 0 {
 				return exitErr(wire.E("INVALID_ARGUMENT", "invalid --timeout"), &g)
 			}
-			if len(args) < 1 {
-				return exitErr(wire.E("INVALID_ARGUMENT", "target is required"), &g)
+			target, command, warn, err := prepareRunCommand(args, scriptFile, runShell)
+			if err != nil {
+				return exitErr(err, &g)
 			}
-			if len(args) < 2 {
-				return exitErr(wire.E("INVALID_ARGUMENT", "command is required after --"), &g)
+			if warn != "" && !g.Quiet {
+				fmt.Fprintln(os.Stderr, "hub:", warn)
 			}
 			params := map[string]any{
-				"target": args[0], "command": strings.Join(args[1:], " "),
+				"target": target, "command": command,
 				"timeout_ms": timeoutMS(&g), "allow_public": g.AllowPublic,
 				"jsonl": g.JSONL, "detach": g.Detach, "sensitive": g.Sensitive,
 			}
 			return call(cmd.Context(), wire.JobRun, params, &g, true)
 		},
 	}
+	run.Flags().StringVar(&scriptFile, "script-file", "", "local script file; body is not parsed by PowerShell")
+	run.Flags().StringVar(&runShell, "shell", "", "bash|sh|powershell|pwsh|raw (default: shebang or raw)")
 	addGlobal(run, &g)
 
 	cp := &cobra.Command{
