@@ -53,7 +53,7 @@
 | `Session.Resize` | `hub session resize` | 一次 |
 | `Session.Attach` | `hub session attach` / `hub shell` | 无限流 |
 | `Session.Detach` | `hub session detach` | 一次 |
-| `Session.Close` | `hub session close` | 一次 |
+| `Session.Leave` | `hub session leave` | 一次或有终态流 |
 | `Serial.List` | `hub serial list` | 一次 |
 | `Serial.Exec` | `hub serial exec` | 一次（**Job 门面**；内部用串口 Session，对外只产生 `job_`） |
 | `Serial.Monitor` | `hub serial monitor` | 无限流 |

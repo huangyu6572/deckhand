@@ -25,6 +25,7 @@ const (
 	SessionAttach    = "Session.Attach"
 	SessionDetach    = "Session.Detach"
 	SessionClose     = "Session.Close"
+	SessionLeave     = "Session.Leave"
 	SerialList       = "Serial.List"
 	SerialExec       = "Serial.Exec"
 	SerialMonitor    = "Serial.Monitor"

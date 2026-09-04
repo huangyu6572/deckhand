@@ -208,25 +208,29 @@ func Root() *cobra.Command {
 	var noSentinel bool
 	var writeB64 string
 	sopen := &cobra.Command{Use: "open [flags] <target>", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		return call(cmd.Context(), wire.SessionOpen, map[string]any{"target": args[0], "name": sname, "allow_public": g.AllowPublic}, &g, false)
+		return call(cmd.Context(), wire.SessionOpen, map[string]any{"target": args[0], "name": sname, "allow_public": g.AllowPublic, "workdir": g.Workdir}, &g, false)
 	}}
 	sopen.Flags().StringVar(&sname, "name", "", "session name")
 	addGlobal(sopen, &g)
-	sex := &cobra.Command{Use: "exec [flags] <session> -- <command...>", Args: cobra.MinimumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
-		if len(args) < 2 {
-			return exitErr(wire.E("INVALID_ARGUMENT", "command required"), &g)
+	sex := &cobra.Command{Use: "exec [flags] <session> [--script-file <path>] [-- <command...>]", Args: cobra.MinimumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		if timeoutMS(&g) < 0 {
+			return exitErr(wire.E("INVALID_ARGUMENT", "invalid --timeout"), &g)
 		}
-		command := strings.Join(args[1:], " ")
-		if err := confirmIfRm(args[0], command); err != nil {
+		id, command, inspect, err := prepareSessionCommand(args, scriptFile)
+		if err != nil {
 			return exitErr(err, &g)
 		}
-		params := map[string]any{"session_id": args[0], "command": command, "inspect": command, "timeout_ms": timeoutMS(&g), "no_sentinel": noSentinel, "workdir": g.Workdir}
-		if destructive.LooksLikeRm(command) {
+		if err := confirmIfRm(id, inspect); err != nil {
+			return exitErr(err, &g)
+		}
+		params := map[string]any{"session_id": id, "command": command, "inspect": inspect, "timeout_ms": timeoutMS(&g), "no_sentinel": noSentinel, "workdir": g.Workdir, "jsonl": g.JSONL}
+		if destructive.LooksLikeRm(inspect) {
 			params["rm_confirmed"] = true
 		}
-		return call(cmd.Context(), wire.SessionExec, params, &g, false)
+		return call(cmd.Context(), wire.SessionExec, params, &g, g.JSONL)
 	}}
 	sex.Flags().BoolVar(&noSentinel, "no-sentinel", false, "do not wrap with exit sentinel")
+	sex.Flags().StringVar(&scriptFile, "script-file", "", "local script file; body is not parsed by PowerShell")
 	addGlobal(sex, &g)
 	sread := &cobra.Command{Use: "read [flags] <session>", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		waitMS := int64(0)
@@ -294,6 +298,10 @@ func Root() *cobra.Command {
 	sclose := &cobra.Command{Use: "close [flags] <session>", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		return call(cmd.Context(), wire.SessionClose, map[string]any{"session_id": args[0]}, &g, false)
 	}}
+	sleave := &cobra.Command{Use: "leave [flags] <session>", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		return call(cmd.Context(), wire.SessionLeave, map[string]any{"session_id": args[0], "timeout_ms": timeoutMS(&g), "jsonl": g.JSONL}, &g, g.JSONL)
+	}}
+	addGlobal(sleave, &g)
 	addGlobal(sclose, &g)
 	slogs := &cobra.Command{Use: "logs [flags] <session>", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		params := map[string]any{"session_id": args[0], "after_cursor": int64(0), "jsonl": g.JSONL}
@@ -315,7 +323,7 @@ func Root() *cobra.Command {
 		return call(cmd.Context(), wire.SessionRead, params, &g, false)
 	}}
 	addGlobal(slogs, &g)
-	sess.AddCommand(sopen, sex, sread, swrite, sresize, sattach, sdetach, sclose, slogs)
+	sess.AddCommand(sopen, sex, sread, swrite, sresize, sattach, sdetach, sclose, sleave, slogs)
 
 	shell := &cobra.Command{Use: "shell [flags] <target>", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		if !isTTY() {
@@ -475,13 +483,20 @@ func call(ctx context.Context, method string, params map[string]any, g *globals,
 		case wire.KindEvent:
 			if g.JSONL {
 				_, _ = os.Stdout.Write(append(in.Event, '\n'))
-			} else if !g.JSON && !g.Quiet {
+			} else if !g.Quiet {
 				var ev wire.Event
 				_ = json.Unmarshal(in.Event, &ev)
-				if ev.Type == "stdout" {
-					fmt.Fprint(os.Stdout, ev.Data)
-				} else if ev.Type == "stderr" {
-					fmt.Fprint(os.Stderr, ev.Data)
+				if ev.Type == "stdout" || ev.Type == "stderr" {
+					data := ev.Data
+					if data == "" && ev.DataBase64 != "" {
+						raw, _ := base64.StdEncoding.DecodeString(ev.DataBase64)
+						data = string(raw)
+					}
+					if g.JSON || ev.Type == "stderr" {
+						fmt.Fprint(os.Stderr, data)
+					} else {
+						fmt.Fprint(os.Stdout, data)
+					}
 				}
 			}
 		case wire.KindResponse:

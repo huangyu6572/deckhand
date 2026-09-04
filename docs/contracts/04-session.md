@@ -24,9 +24,13 @@ hub session open [flags] <target> [--name <id>]
 hub session exec [flags] <session> -- <command...>
 ```
 
+`--script-file`：读本地脚本正文写入 PTY，避免 PowerShell 改写。不要与 `--` 命令并用。脚本在该 session 的 login shell 里执行（不外包 `bash -s`，以便 `export` 留下）。
+
 `--no-sentinel`：无可靠 exit。超时无标记：`JOB_TIMEOUT`，不得假 `exit_code=0`。
 
-`--workdir`：Hub 先 `cd`；查询其他目录可以，写入/删除/`cd` 离开不得越出。
+`hub session open --workdir ~/sub-2-api`：把工作区绑到这条 PTY。之后 `session exec` **不必**再带 `--workdir`；Hub 只在尚未进入时 `mkdir`/`cd` 一次，之后 cwd/`export` 留在 PTY 里。`cd src` 会停在子目录。越界写入仍按绑定期的工作区检查。`hub session leave <session>`：`cd "$HOME"` 并解除绑定，之后才能离开该树。`cd ..` 仍会 `FILE_OUTSIDE_WORKSPACE`。
+
+`--json` 时 stdout 仍是最终一个 JSON；PTY 输出会同时打到 stderr，便于长命令及时看到进度。`--jsonl` 为事件流。
 
 `false`：`ok=false`，`REMOTE_EXIT_NONZERO` 或解析到的非零码。
 

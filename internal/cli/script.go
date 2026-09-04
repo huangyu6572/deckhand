@@ -12,36 +12,38 @@ import (
 
 const maxScriptBytes = 256 * 1024
 
+func readScriptBody(args []string, scriptFile string) (body, warn string, bashC bool, err error) {
+	if scriptFile != "" {
+		if len(args) > 0 {
+			return "", "", false, wire.E("INVALID_ARGUMENT", "do not combine --script-file with -- command")
+		}
+		b, rerr := os.ReadFile(scriptFile)
+		if rerr != nil {
+			return "", "", false, wire.Ef("INVALID_ARGUMENT", "script-file: %v", rerr)
+		}
+		return strings.TrimPrefix(string(b), "\ufeff"), "", false, nil
+	}
+	if len(args) < 1 {
+		return "", "", false, wire.E("INVALID_ARGUMENT", "command is required after --")
+	}
+	extracted, warn := extractBashC(args)
+	if extracted != "" {
+		return extracted, warn, true, nil
+	}
+	return strings.Join(args, " "), warn, false, nil
+}
+
 func prepareRunCommand(args []string, scriptFile, shell string) (target, command, inspect, warn string, err error) {
 	if len(args) < 1 {
 		return "", "", "", "", wire.E("INVALID_ARGUMENT", "target is required")
 	}
 	target = args[0]
-	var body string
-	if scriptFile != "" {
-		if len(args) > 1 {
-			return "", "", "", "", wire.E("INVALID_ARGUMENT", "do not combine --script-file with -- command")
-		}
-		b, rerr := os.ReadFile(scriptFile)
-		if rerr != nil {
-			return "", "", "", "", wire.Ef("INVALID_ARGUMENT", "script-file: %v", rerr)
-		}
-		body = strings.TrimPrefix(string(b), "\ufeff")
-	} else {
-		if len(args) < 2 {
-			return "", "", "", "", wire.E("INVALID_ARGUMENT", "command is required after --")
-		}
-		rest := args[1:]
-		var extracted string
-		extracted, warn = extractBashC(rest)
-		if extracted != "" {
-			body = extracted
-			if strings.TrimSpace(shell) == "" {
-				shell = "bash"
-			}
-		} else {
-			body = strings.Join(rest, " ")
-		}
+	body, warn, bashC, err := readScriptBody(args[1:], scriptFile)
+	if err != nil {
+		return "", "", "", "", err
+	}
+	if bashC && strings.TrimSpace(shell) == "" {
+		shell = "bash"
 	}
 	if len(body) > maxScriptBytes {
 		return "", "", "", "", wire.E("INVALID_ARGUMENT", "script too large; hub cp the file then run the remote path")
@@ -57,6 +59,24 @@ func prepareRunCommand(args []string, scriptFile, shell string) (target, command
 		return "", "", "", "", werr
 	}
 	return target, wrapped, body, warn, nil
+}
+
+func prepareSessionCommand(args []string, scriptFile string) (id, command, inspect string, err error) {
+	if len(args) < 1 {
+		return "", "", "", wire.E("INVALID_ARGUMENT", "session is required")
+	}
+	id = args[0]
+	body, _, _, err := readScriptBody(args[1:], scriptFile)
+	if err != nil {
+		return "", "", "", err
+	}
+	if len(body) > maxScriptBytes {
+		return "", "", "", wire.E("INVALID_ARGUMENT", "script too large; hub cp the file then run the remote path")
+	}
+	if looksPowerShellMangled(body) {
+		return "", "", "", wire.E("INVALID_ARGUMENT", "command looks rewritten by PowerShell ($?, 2>&1, quotes); use --script-file")
+	}
+	return id, body, body, nil
 }
 
 func extractBashC(rest []string) (script, warn string) {

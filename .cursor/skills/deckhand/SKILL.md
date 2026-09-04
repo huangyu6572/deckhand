@@ -22,30 +22,32 @@ In order: `connections.yaml` name, then exact `~/.ssh/config` `Host`, then `user
 
 Everyday SSH commands use a persistent remote PTY held by `hubd`. Local `hub` is only the CLI. This is a remote shell, not a mounted workspace: files still go through `hub cp`.
 
-1. Name: target plus the last segment of `--workdir`, letters/digits/hyphens only. Example: `--workdir ~/sub-2-api` on `dev-web` → `--name dev-web-sub-2-api`. No `--workdir` → `--name dev-web`. If two directories share a basename in the same chat, include another path segment.
-2. Open once (same name while `open` is reused; do not open a second PTY):
+1. Name: target plus the last segment of `--workdir`, letters/digits/hyphens only. Example: `--workdir ~/sub-2-api` on `dev-web` → `--name dev-web-sub-2-api`. No `--workdir` → `--name dev-web`.
+2. Open once, bind the remote directory on open (same name while `open` is reused):
 
 ```text
-hub session open --json <target> --name <name>
+hub session open --json <target> --name <name> --workdir ~/sub-2-api
 ```
 
-3. Run commands on that name. Pass `--workdir` every time when the user named a remote directory. Do not `cd` in the command.
+3. Run commands **without** repeating `--workdir`. The PTY stays in that tree (`cd src` persists). Do not `cd` to the workspace root in the command.
 
 ```text
-hub session exec --json <name> --workdir ~/sub-2-api -- uname -a
+hub session exec --json <name> -- pwd
 ```
 
-4. Do not `session close` unless the user asks. CLI exit does not kill the PTY.
+Long commands: prefer `--jsonl` so output streams as events. `--json` still prints a final object; live PTY output also goes to stderr.
+4. Leave the workspace only with `hub session leave --json <name>` (cds `$HOME` and unbinds). Do not `cd ..`. Do not `session close` unless the user asks.
 5. Do not default to `hub shell`, `session attach`, or `--no-sentinel` (no TTY here).
 
-`session exec` has no `--script-file`. If PowerShell would rewrite the command, write a local `.sh`, `hub cp` it under `--workdir`, then `session exec` `bash` that file.
+If PowerShell would rewrite the command (`&&`, `$?`, `2>&1`), use `hub session exec --json <name> --script-file <local.sh>` (body is typed into the PTY; `export` persists). Do not combine `--script-file` with `--` command.
 
 ## Default commands
 
 | Task | Command |
 |------|---------|
-| Open shell | `hub session open --json <target> --name <name>` |
-| Run | `hub session exec --json <name> [--workdir <dir>] -- <cmd>` |
+| Open shell | `hub session open --json <target> --name <name> [--workdir <dir>]` |
+| Run | `hub session exec --json <name> -- <cmd>` |
+| Leave workspace | `hub session leave --json <name>` |
 | Detach / long job | `hub run --json <target> --detach -- <cmd>` then `hub job wait` |
 | Upload | `hub cp --json <local> <target>:/remote/path` |
 | Download | `hub cp --json <target>:/remote/path <local>` |
@@ -56,8 +58,8 @@ hub session exec --json <name> --workdir ~/sub-2-api -- uname -a
 
 Rules:
 
-- `session exec` and `run` require `--` before the remote command. `run` may use `--script-file <local>` plus `--shell bash` (Linux) / `--shell powershell` (Windows remote).
-- Do not put `&&`, `$?`, `2>&1`, or `bash -c "..."` in PowerShell argv. If hub reports the command was rewritten, write a local `.sh`/`.ps1` and pass `--script-file` (`run` only) or upload and `bash` it (`session exec`).
+- `session exec` and `run` require `--` before the remote command, or `--script-file <local>`. `run` may add `--shell bash` (Linux) / `--shell powershell` (Windows remote). `session exec --script-file` is raw PTY input (no `--shell` wrap).
+- Do not put `&&`, `$?`, `2>&1`, or `bash -c "..."` in PowerShell argv. If hub reports the command was rewritten, use `--script-file`.
 - Never pass `--password` (exit 2). Passwords: yaml `auth.type: password` then `hub secret set <name>`.
 - Commands that may contain secrets: add `--sensitive`.
 - Long jobs that must outlive the CLI: `hub run --detach`, then `hub job wait --json <id>`. Do not use `session exec` for `--detach`.
@@ -65,7 +67,7 @@ Rules:
 
 ## Safety
 
-When the user names a remote working directory, pass `--workdir` on `session exec` / `run` / `cp` / `deploy`. Example: `--workdir ~/sub-2-api`. Hub cds there itself. Do not put `cd /home/...` in the command.
+When the user names a remote working directory, pass `--workdir` on **`session open`** (and on `run` / `cp` / `deploy`). Do not pass `--workdir` on every `session exec`. Hub cds there once. `hub session leave` to leave. Do not put `cd /home/...` in the command.
 
 - Allowed outside that directory: `ls`, `cat`, `find` (no `-delete`), `stat`, and other read-only lookup.
 - Forbidden outside that directory: `rm`, `mkdir`, `mv`, `cp`, `touch`, `chmod`, `cd ..` / `cd /elsewhere`, and `>` / `>>` redirects. Hub returns `FILE_OUTSIDE_WORKSPACE`.

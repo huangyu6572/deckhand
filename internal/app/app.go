@@ -266,10 +266,21 @@ func (a *App) dispatch(ctx context.Context, cancel context.CancelFunc, c net.Con
 		r["targets"] = names
 		a.writeResult(c, reqID, r, nil)
 	case wire.SessionOpen:
-		r, err := a.Sess.Open(ctx, reqID, str("target"), str("name"), allow)
+		r, err := a.Sess.Open(ctx, reqID, str("target"), str("name"), allow, str("workdir"))
 		a.writeResult(c, reqID, r, err)
 	case wire.SessionExec:
-		r, err := a.Sess.Exec(ctx, reqID, str("session_id"), str("command"), timeout, boolf("no_sentinel"), boolf("rm_confirmed"), str("workdir"))
+		jsonl := boolf("jsonl")
+		if jsonl {
+			a.writeRunning(c, reqID, wire.Base(true, reqID, "running"))
+		}
+		emit := func(ev wire.Event) { a.writeEvent(c, reqID, ev) }
+		r, err := a.Sess.Exec(ctx, reqID, str("session_id"), str("command"), timeout, boolf("no_sentinel"), boolf("rm_confirmed"), str("workdir"), str("inspect"), emit)
+		a.writeResult(c, reqID, r, err)
+	case wire.SessionLeave:
+		if boolf("jsonl") {
+			a.writeRunning(c, reqID, wire.Base(true, reqID, "running"))
+		}
+		r, err := a.Sess.Leave(ctx, reqID, str("session_id"), timeout, func(ev wire.Event) { a.writeEvent(c, reqID, ev) })
 		a.writeResult(c, reqID, r, err)
 	case wire.SessionRead:
 		wait := time.Duration(int64f("wait_ms")) * time.Millisecond

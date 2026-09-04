@@ -99,3 +99,36 @@ func TestCmdShellRejected(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestPrepareSessionCommandScriptFile(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "x.sh")
+	if err := os.WriteFile(p, []byte("cd /tmp && pwd && echo $?\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	id, cmd, inspect, err := prepareSessionCommand([]string{"cloud-172-sub-2-api"}, p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != "cloud-172-sub-2-api" {
+		t.Fatal(id)
+	}
+	if inspect != "cd /tmp && pwd && echo $?\n" && inspect != "cd /tmp && pwd && echo $?" {
+		if !strings.Contains(inspect, "cd /tmp && pwd") {
+			t.Fatalf("inspect %q", inspect)
+		}
+	}
+	if cmd != inspect {
+		t.Fatalf("session exec must send raw body, not wrap: cmd=%q inspect=%q", cmd, inspect)
+	}
+	if strings.Contains(cmd, "base64 -d") {
+		t.Fatalf("must not wrap session script: %q", cmd)
+	}
+}
+
+func TestPrepareSessionCommandRejectsMangled(t *testing.T) {
+	_, _, _, err := prepareSessionCommand([]string{"s", "echo", "exit=True"}, "")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}

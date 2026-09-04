@@ -8,14 +8,15 @@ SSH PTY 交互。可靠 exit code 仍只来自 `hub run`。`session exec` 在约
 
 ## Sentinel（session exec）
 
-每次生成 128-bit nonce。写入**一条** sh 复合命令，例如：
+每次生成 128-bit nonce。把用户命令先 base64，再作为**一行**写入 PTY。工作区只在 session **尚未进入**时前置 `mkdir`/`cd`；已绑定则不再 cd。
 
 ```text
-{ <user-command>
-printf '\n__HUB_DONE_<nonce>_%s__\n' "$?"; }
+eval "$(printf '%s' <b64> | base64 -d)"; printf '\n__HUB_DONE_<nonce>_%s__\n' "$?";
 ```
 
-只匹配含该 nonce 的标记。同 Session 的 `exec` **严格串行**。已有 raw `write` 未结束或 TUI 活跃 → `SESSION_BUSY`。只支持 POSIX `sh` 兼容交互 shell。原始 PTY 全量落盘；JSON `stdout` 是去掉回显与标记后的区间视图。超时后迟到的旧标记不得被下次 exec 消费（nonce 不同）。
+`eval` 在当前 login shell 执行，因此 cwd/`export` 会留下。只匹配 `__HUB_DONE_<nonce>_<digits>__`；PTY 回显里的 `%s` **不得**当作结束。JSON `stdout` 去掉含该 nonce 的回显行。
+
+同 Session 的 `exec` **严格串行**。已有 raw `write` 未结束或 TUI 活跃 → `SESSION_BUSY`。超时后迟到的旧标记不得被下次 exec 消费（nonce 不同）。
 
 `--no-sentinel`：无 exit_code。
 

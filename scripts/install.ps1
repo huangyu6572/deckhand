@@ -319,10 +319,44 @@ function Install-FromRelease {
     }
 }
 
+function Get-LocalRepoRoot {
+    if (-not $PSScriptRoot) { return $null }
+    $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+    if ((Test-Path (Join-Path $root "cmd\hub\main.go")) -and (Test-Path (Join-Path $root "cmd\hubd\main.go"))) {
+        return $root
+    }
+    return $null
+}
+
+function Install-BuiltRoot([string]$root, [string]$go) {
+    Write-Step "building with $go"
+    Write-Hint $root
+    $product = Join-Path $root "product"
+    New-Item -ItemType Directory -Force -Path $product | Out-Null
+    Push-Location $root
+    try {
+        & $go build -o (Join-Path $product "hub.exe") ./cmd/hub
+        if ($LASTEXITCODE -ne 0) { throw "go build hub failed" }
+        & $go build -o (Join-Path $product "hubd.exe") ./cmd/hubd
+        if ($LASTEXITCODE -ne 0) { throw "go build hubd failed" }
+    } finally {
+        Pop-Location
+    }
+    Write-Step "installing to $Prefix"
+    Install-FromDir $product
+    Copy-SkillIntoPrefix (Find-SkillMd $root)
+}
+
 function Install-FromSource {
     $go = Get-GoExe
     if (-not $go) {
         throw "need Go 1.24+ to build from source. Install https://go.dev/dl/ or wait for a GitHub Release."
+    }
+    $local = Get-LocalRepoRoot
+    if ($local) {
+        Write-Step "building from local clone"
+        Install-BuiltRoot $local $go
+        return
     }
     $tmp = Join-Path $env:TEMP ("deckhand-src-" + [guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Force -Path $tmp | Out-Null
@@ -335,20 +369,7 @@ function Install-FromSource {
         Expand-Zip $zip $extract
         $root = Get-ChildItem -LiteralPath $extract -Directory | Select-Object -First 1
         if (-not $root) { throw "source zip is empty" }
-        Write-Step "building with $go"
-        Push-Location $root.FullName
-        try {
-            & $go build -o (Join-Path $root.FullName "product\hub.exe") ./cmd/hub
-            if ($LASTEXITCODE -ne 0) { throw "go build hub failed" }
-            & $go build -o (Join-Path $root.FullName "product\hubd.exe") ./cmd/hubd
-            if ($LASTEXITCODE -ne 0) { throw "go build hubd failed" }
-        } finally {
-            Pop-Location
-        }
-        $product = Join-Path $root.FullName "product"
-        Write-Step "installing to $Prefix"
-        Install-FromDir $product
-        Copy-SkillIntoPrefix (Find-SkillMd $root.FullName)
+        Install-BuiltRoot $root.FullName $go
     } finally {
         Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
     }

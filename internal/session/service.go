@@ -9,6 +9,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,18 +26,20 @@ import (
 )
 
 type liveSess struct {
-	id     string
-	name   string
-	kind   string
-	state  string
-	row    *storage.Session
-	target *config.Resolved
-	pty    contract.PTY
-	serial contract.SerialConn
-	entry  *pool.Entry
-	w      *logstore.Writer
-	mu     sync.Mutex
-	busy   bool
+	id      string
+	name    string
+	kind    string
+	state   string
+	row     *storage.Session
+	target  *config.Resolved
+	pty     contract.PTY
+	serial  contract.SerialConn
+	entry   *pool.Entry
+	w       *logstore.Writer
+	mu      sync.Mutex
+	busy    bool
+	workdir string
+	entered bool
 }
 
 type Service struct {
@@ -57,7 +61,7 @@ func New(dataDir string, db *storage.DB, logs *logstore.Store, p *pool.Pool, res
 	}
 }
 
-func (s *Service) Open(ctx context.Context, requestID, target, name string, allowPublic bool) (wire.Result, error) {
+func (s *Service) Open(ctx context.Context, requestID, target, name string, allowPublic bool, workdir string) (wire.Result, error) {
 	t, err := s.Resolve(ctx, target, allowPublic)
 	if err != nil {
 		return nil, err
@@ -67,6 +71,14 @@ func (s *Service) Open(ctx context.Context, requestID, target, name string, allo
 	}
 	if name != "" {
 		if r, err := s.existingNamed(ctx, requestID, name); r != nil || err != nil {
+			if r != nil && err == nil {
+				if err := s.bindNamed(name, workdir); err != nil {
+					return nil, err
+				}
+				if ls := s.liveByName(name); ls != nil {
+					return s.openResult(requestID, ls), nil
+				}
+			}
 			return r, err
 		}
 	}
@@ -125,6 +137,10 @@ func (s *Service) Open(ctx context.Context, requestID, target, name string, allo
 	}
 	ls := &liveSess{id: id, name: name, kind: "ssh_pty", state: "open", row: row, target: t, pty: pty, entry: entry, w: w}
 	s.putLive(ls)
+	if err := ls.bindWorkdir(workdir); err != nil {
+		s.Close(ctx, requestID, id)
+		return nil, err
+	}
 	go s.pumpPTY(ls)
 	return s.openResult(requestID, ls), nil
 }
@@ -160,7 +176,74 @@ func (s *Service) openResult(requestID string, ls *liveSess) wire.Result {
 	if ls.target != nil {
 		r["target"] = ls.target.Ref
 	}
+	ls.mu.Lock()
+	if ls.workdir != "" {
+		r["workdir"] = ls.workdir
+	}
+	ls.mu.Unlock()
 	return r
+}
+
+func (s *Service) liveByName(name string) *liveSess {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.byName[name]
+}
+
+func (s *Service) bindNamed(name, workdir string) error {
+	ls := s.liveByName(name)
+	if ls == nil {
+		return nil
+	}
+	return ls.bindWorkdir(workdir)
+}
+
+func (ls *liveSess) bindWorkdir(cli string) error {
+	cli = strings.TrimSpace(cli)
+	if cli == "" {
+		return nil
+	}
+	yamlRoot := ""
+	if ls.target != nil {
+		yamlRoot = ls.target.WorkspaceRoot
+	}
+	wd, err := workspace.Confine(cli, yamlRoot)
+	if err != nil {
+		return err
+	}
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+	if ls.workdir != wd {
+		ls.workdir = wd
+		ls.entered = false
+	}
+	return nil
+}
+
+func (ls *liveSess) takeWorkdir(cli string) (wd string, shouldCD bool, err error) {
+	if err := ls.bindWorkdir(cli); err != nil {
+		return "", false, err
+	}
+	ls.mu.Lock()
+	defer ls.mu.Unlock()
+	wd = ls.workdir
+	if wd != "" && !ls.entered {
+		return wd, true, nil
+	}
+	return wd, false, nil
+}
+
+func (ls *liveSess) markEntered() {
+	ls.mu.Lock()
+	ls.entered = true
+	ls.mu.Unlock()
+}
+
+func (ls *liveSess) clearWorkdir() {
+	ls.mu.Lock()
+	ls.workdir = ""
+	ls.entered = false
+	ls.mu.Unlock()
 }
 
 func (s *Service) putLive(ls *liveSess) {
@@ -256,26 +339,25 @@ func (s *Service) resolveRow(ctx context.Context, id string) (*storage.Session, 
 	return row, nil
 }
 
-func (s *Service) Exec(ctx context.Context, requestID, sess, command string, timeout time.Duration, noSentinel, rmConfirmed bool, workdir string) (wire.Result, error) {
-	if err := destructive.RefuseUnlessConfirmed(command, rmConfirmed); err != nil {
+func (s *Service) Exec(ctx context.Context, requestID, sess, command string, timeout time.Duration, noSentinel, rmConfirmed bool, workdir, inspect string, emit func(wire.Event)) (wire.Result, error) {
+	if inspect == "" {
+		inspect = command
+	}
+	if err := destructive.RefuseUnlessConfirmed(inspect+"\n"+command, rmConfirmed); err != nil {
 		return nil, err
 	}
 	ls, err := s.getLive(sess)
 	if err != nil {
 		return nil, err
 	}
-	yamlRoot := ""
-	if ls.target != nil {
-		yamlRoot = ls.target.WorkspaceRoot
-	}
-	wd, err := workspace.Confine(workdir, yamlRoot)
+	wd, shouldCD, err := ls.takeWorkdir(workdir)
 	if err != nil {
 		return nil, err
 	}
-	if err := workspace.CheckCommand(command, wd); err != nil {
+	if err := workspace.CheckCommand(inspect, wd); err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(wd) != "" {
+	if shouldCD {
 		command = "mkdir -p -- " + workspace.ShellPath(wd) + " && cd -- " + workspace.ShellPath(wd) + " || exit 1; " + command
 	}
 	if ls.pty == nil {
@@ -297,18 +379,32 @@ func (s *Service) Exec(ctx context.Context, requestID, sess, command string, tim
 	nonce := randNonce()
 	cmd := command
 	if !noSentinel {
-		cmd = fmt.Sprintf("{ %s\nprintf '\\n__HUB_DONE_%s_%%s__\\n' \"$?\"; }", command, nonce)
+		cmd = wrapSessionExec(command, nonce)
 	}
 	mark := ls.w.Cursor()
+	if emit != nil && ls.w != nil {
+		ch, unsub := ls.w.Subscribe(256)
+		defer unsub()
+		go func() {
+			for ev := range ch {
+				emit(ev)
+			}
+		}()
+	}
 	if _, err := ls.pty.Write([]byte(cmd + "\n")); err != nil {
 		return nil, wire.E("REMOTE_UNREACHABLE", err.Error())
+	}
+	if shouldCD {
+		ls.markEntered()
 	}
 	if noSentinel {
 		r := wire.Base(true, requestID, "open")
 		r["operation_id"] = ls.id
+		if wd != "" {
+			r["workdir"] = wd
+		}
 		return r, nil
 	}
-	needle := "__HUB_DONE_" + nonce + "_"
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		select {
@@ -323,29 +419,64 @@ func (s *Service) Exec(ctx context.Context, requestID, sess, command string, tim
 				b.WriteString(logstore.EventBytes(ev))
 			}
 		}
-		text := b.String()
-		if i := strings.Index(text, needle); i >= 0 {
-			rest := text[i+len(needle):]
-			end := strings.Index(rest, "__")
-			code := 0
-			if end > 0 {
-				fmt.Sscanf(rest[:end], "%d", &code)
-			}
-			out := text[:i]
-			ok := code == 0
-			r := wire.Base(ok, requestID, mapStatus(ok))
-			r["operation_id"] = ls.id
-			r["exit_code"] = code
-			r["stdout"] = out
-			if !ok {
-				r["error_code"] = "REMOTE_EXIT_NONZERO"
-				r["retryable"] = false
-				r["message"] = "remote exit nonzero"
-			}
-			return r, nil
+		code, out, found := parseSentinel(b.String(), nonce)
+		if !found {
+			continue
 		}
+		ok := code == 0
+		r := wire.Base(ok, requestID, mapStatus(ok))
+		r["operation_id"] = ls.id
+		r["exit_code"] = code
+		r["stdout"] = out
+		if wd != "" {
+			r["workdir"] = wd
+		}
+		if !ok {
+			r["error_code"] = "REMOTE_EXIT_NONZERO"
+			r["retryable"] = false
+			r["message"] = "remote exit nonzero"
+		}
+		return r, nil
 	}
 	return nil, wire.E("JOB_TIMEOUT", "session exec timed out")
+}
+
+func (s *Service) Leave(ctx context.Context, requestID, sess string, timeout time.Duration, emit func(wire.Event)) (wire.Result, error) {
+	ls, err := s.getLive(sess)
+	if err != nil {
+		return nil, err
+	}
+	ls.clearWorkdir()
+	return s.Exec(ctx, requestID, sess, `cd -- "$HOME"`, timeout, false, false, "", `cd -- "$HOME"`, emit)
+}
+
+func wrapSessionExec(command, nonce string) string {
+	b64 := base64.StdEncoding.EncodeToString([]byte(strings.TrimRight(command, "\r\n") + "\n"))
+	return fmt.Sprintf("eval \"$(printf '%%s' %s | base64 -d)\"; printf '\\n__HUB_DONE_%s_%%s__\\n' \"$?\"", b64, nonce)
+}
+
+func parseSentinel(text, nonce string) (code int, stdout string, found bool) {
+	re := regexp.MustCompile(`__HUB_DONE_` + regexp.QuoteMeta(nonce) + `_(\d+)__`)
+	loc := re.FindStringSubmatchIndex(text)
+	if loc == nil {
+		return 0, "", false
+	}
+	code, _ = strconv.Atoi(text[loc[2]:loc[3]])
+	return code, stripPTYEcho(text[:loc[0]], nonce), true
+}
+
+func stripPTYEcho(prefix, nonce string) string {
+	prefix = strings.ReplaceAll(prefix, "\r", "")
+	key := "__HUB_DONE_" + nonce + "_"
+	i := strings.Index(prefix, key)
+	if i < 0 {
+		return strings.TrimPrefix(prefix, "\n")
+	}
+	rest := prefix[i:]
+	if nl := strings.Index(rest, "\n"); nl >= 0 {
+		return strings.TrimPrefix(rest[nl+1:], "\n")
+	}
+	return ""
 }
 
 func mapStatus(ok bool) string {
