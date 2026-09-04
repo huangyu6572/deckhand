@@ -54,7 +54,19 @@ hub target list --json
 
 配置在 `%LOCALAPPDATA%\LocalAIHub\`，不是安装目录。不要在 yaml 里写密码；需要时用 `hub secret set <名字>`。
 
-命令：[../product/CLI使用说明.md](../product/CLI使用说明.md)。配置：[../product/配置说明.md](../product/配置说明.md)。
+给本地 AI 装 Skill（Cursor / Copilot / 其它助手）：
+
+```powershell
+npx skills add huangyu6572/deckhand -g -y
+```
+
+或不装 Node：
+
+```powershell
+irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install-skill.ps1 | iex
+```
+
+命令：[../product/CLI使用说明.md](../product/CLI使用说明.md)。配置：[../product/配置说明.md](../product/配置说明.md)。Skill：[../skills/deckhand/SKILL.md](../skills/deckhand/SKILL.md)。
 
 ## 维护者如何发一版
 

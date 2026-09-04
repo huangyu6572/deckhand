@@ -96,7 +96,19 @@ hub job list --json
 
 ## 给本地 AI
 
-在 Cursor / 其它本机 AI 里，把安装目录中的 **`hub.exe`** 设为允许执行的命令（与 `hubd.exe` 必须同目录）。优先让模型用上表几条默认命令，并带 `--json`。
+把安装目录中的 **`hub.exe`** 设为允许执行的命令（与 `hubd.exe` 必须同目录）。再装仓库里的 Skill，助手就会按正确语法调 `hub`：
+
+```powershell
+npx skills add huangyu6572/deckhand -g -y
+```
+
+或不装 Node，PowerShell 整行粘贴：
+
+```powershell
+irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install-skill.ps1 | iex
+```
+
+会把 [`skills/deckhand/SKILL.md`](skills/deckhand/SKILL.md) 装到 `%USERPROFILE%\.cursor\skills\deckhand\`（以及 `.agents` / `.copilot`）。装完请**新开一轮对话**。优先用上表几条默认命令，并带 `--json`。
 
 ---
 
@@ -125,6 +137,7 @@ powershell -File scripts\pack-release.ps1
 | 文档 | 给谁看 |
 |------|--------|
 | [一键安装](docs/install.md) | 从 GitHub 拉下来装 |
+| [AI Skill](skills/deckhand/SKILL.md) | 给 Cursor / 其它助手下载 |
 | [发给别人的目录说明](product/README.md) | 拷贝 `product/` 的人 |
 | [CLI 使用说明](product/CLI使用说明.md) | 命令、参数、退出码 |
 | [配置说明](product/配置说明.md) | `connections.yaml` / Recipe |

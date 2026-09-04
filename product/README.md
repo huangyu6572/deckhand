@@ -47,4 +47,10 @@ hub run --json user@192.168.1.20 -- uname -a
 
 第一次运行会自动创建 `%LOCALAPPDATA%\LocalAIHub` 并启动 `hubd.exe`。远端只要已有 sshd 或 COM，**不要装插件**。
 
-给本地 AI 用时：在该产品里把 `hub.exe` 设为允许执行的命令。命令表见 [CLI使用说明.md](CLI使用说明.md)。
+给本地 AI 用时：在该产品里把 `hub.exe` 设为允许执行的命令，并装仓库 Skill：
+
+```powershell
+npx skills add huangyu6572/deckhand -g -y
+```
+
+或不装 Node：`irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install-skill.ps1 | iex`。命令表见 [CLI使用说明.md](CLI使用说明.md)。
