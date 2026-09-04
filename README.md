@@ -50,7 +50,12 @@ $env:DECKHAND_MIRROR = "https://ghfast.top"
 irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install.ps1 | iex
 ```
 
-也可以在 [Releases](https://github.com/huangyu6572/deckhand/releases/latest) 下载 `deckhand-windows-amd64.zip`，或拷贝仓库里的 [`product/`](product/) 整个目录。细节：[docs/install.md](docs/install.md)
+也可以在 [Releases](https://github.com/huangyu6572/deckhand/releases/latest) 用浏览器下载 `deckhand-windows-amd64.zip`（浏览器往往比命令行更稳），再本地安装、不走 GitHub 下载：
+
+```powershell
+$env:DECKHAND_ZIP = "$env:USERPROFILE\Downloads\deckhand-windows-amd64.zip"
+irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install.ps1 | iex
+```
 
 ---
 

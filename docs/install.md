@@ -28,6 +28,7 @@ irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install.
 | `DECKHAND_NO_PATH` | `1`：不改 PATH（仍会写 `DECKHAND_HOME`） |
 | `DECKHAND_NO_SKILL` | `1`：不装 AI Skill |
 | `DECKHAND_MIRROR` | GitHub 加速前缀，如 `https://ghfast.top`（会优先于内置镜像） |
+| `DECKHAND_ZIP` | 已下载的 `deckhand-windows-amd64.zip` 本地路径，跳过网络下载 |
 | `DECKHAND_REPO` | 默认 `huangyu6572/deckhand` |
 
 ```powershell
@@ -50,10 +51,16 @@ powershell -File scripts\install.ps1 -Prefix D:\Tools\Deckhand -FromSource
 
 ## 手动下载
 
-1. 打开 [Releases](https://github.com/huangyu6572/deckhand/releases/latest)
-2. 下载 `deckhand-windows-amd64.zip`
-3. 解压到任意目录（两个 exe 不要拆开）
-4. 把该目录加入 PATH，或用全路径调用 `hub.exe`
+命令行下 GitHub zip 若卡住：用浏览器打开 [Releases](https://github.com/huangyu6572/deckhand/releases/latest)，下载 `deckhand-windows-amd64.zip`，再：
+
+```powershell
+$env:DECKHAND_ZIP = "$env:USERPROFILE\Downloads\deckhand-windows-amd64.zip"
+irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install.ps1 | iex
+```
+
+这会解压 zip、写入 PATH / `DECKHAND_HOME`、安装 Skill，与一键安装后半段相同。
+
+也可以不解压脚本、自己解压 zip 后把该目录加入 PATH（两个 exe 不要拆开）。
 
 也可以拷贝仓库里编好的 [`product/`](../product/) 整个目录（需先 `powershell -File scripts\build.ps1`）。
 

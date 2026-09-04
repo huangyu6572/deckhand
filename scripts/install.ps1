@@ -3,7 +3,8 @@
 #   irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install.ps1 | iex
 #   $env:DECKHAND_PREFIX = "D:\Tools\Deckhand"; irm ... | iex
 #   $env:DECKHAND_FROM_SOURCE = "1"; irm ... | iex
-#   powershell -File scripts\install.ps1 -Prefix D:\Tools\Deckhand
+#   powershell -File scripts\install.ps1 -Zip $env:USERPROFILE\Downloads\deckhand-windows-amd64.zip
+#   $env:DECKHAND_ZIP = "$env:USERPROFILE\Downloads\deckhand-windows-amd64.zip"; irm ... | iex
 #
 # Default: copies hub.exe + hubd.exe, adds that folder to the current-user PATH,
 # sets user env DECKHAND_HOME, and installs the agent skill.
@@ -13,6 +14,7 @@ param(
     [string]$Repo = "huangyu6572/deckhand",
     [string]$Prefix = "",
     [string]$Version = "latest",
+    [string]$Zip = "",
     [switch]$FromSource,
     [switch]$NoPath,
     [switch]$NoSkill
@@ -25,6 +27,7 @@ $ProgressPreference = "SilentlyContinue"
 if ($env:DECKHAND_REPO) { $Repo = $env:DECKHAND_REPO }
 if ($env:DECKHAND_PREFIX) { $Prefix = $env:DECKHAND_PREFIX }
 if ($env:DECKHAND_VERSION) { $Version = $env:DECKHAND_VERSION }
+if ($env:DECKHAND_ZIP) { $Zip = $env:DECKHAND_ZIP }
 if ($env:DECKHAND_FROM_SOURCE -in @("1", "true", "True", "yes")) { $FromSource = $true }
 if ($env:DECKHAND_NO_PATH -in @("1", "true", "True", "yes")) { $NoPath = $true }
 if ($env:DECKHAND_NO_SKILL -in @("1", "true", "True", "yes")) { $NoSkill = $true }
@@ -220,6 +223,29 @@ function Install-UserSkill {
     }
 }
 
+function Install-FromZipFile([string]$zipPath) {
+    $zipPath = $zipPath.Trim('"')
+    if (-not (Test-Path -LiteralPath $zipPath)) {
+        throw "zip not found: $zipPath"
+    }
+    Write-Step "installing from local zip"
+    Write-Hint $zipPath
+    $tmp = Join-Path $env:TEMP ("deckhand-zip-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+    try {
+        Expand-Zip $zipPath $tmp
+        $payload = Find-PayloadDir $tmp
+        if (-not $payload) { throw "zip has no hub.exe" }
+        Write-Step "installing to $Prefix"
+        Install-FromDir $payload
+        $fromExtract = Find-SkillMd $tmp
+        if ($fromExtract) { Copy-SkillIntoPrefix $fromExtract }
+        return $true
+    } finally {
+        Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Get-ReleaseJson {
     $url = if ($Version -eq "latest") {
         "$api/releases/latest"
@@ -328,10 +354,13 @@ Write-Hint "repo    $Repo"
 Write-Hint "prefix  $Prefix"
 
 $ok = $false
-if (-not $FromSource) {
+if ($Zip) {
+    $ok = Install-FromZipFile $Zip
+} elseif (-not $FromSource) {
     $ok = Install-FromRelease
 }
 if (-not $ok) {
+    if ($Zip) { throw "local zip install failed" }
     if ($FromSource) {
         Write-Step "building from source (-FromSource)"
     } else {
