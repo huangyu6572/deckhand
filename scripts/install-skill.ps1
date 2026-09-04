@@ -9,6 +9,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 if ($env:DECKHAND_REPO) { $Repo = $env:DECKHAND_REPO }
@@ -41,7 +42,13 @@ if ($localSkill) {
     Write-Host "   $url"
     $tmp = Join-Path $env:TEMP ("deckhand-skill-" + [guid]::NewGuid().ToString("N") + ".md")
     try {
-        Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing -Headers @{ "User-Agent" = "Deckhand-skill-install" }
+        $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+        if ($curl) {
+            & curl.exe -fsSL --retry 3 -A "Deckhand-skill-install" -o $tmp $url
+            if ($LASTEXITCODE -ne 0) { throw "download failed: $url" }
+        } else {
+            Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing -Headers @{ "User-Agent" = "Deckhand-skill-install" }
+        }
         foreach ($d in $dests) { Install-SkillFile $tmp $d }
     } finally {
         Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue

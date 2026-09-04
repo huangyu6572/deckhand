@@ -19,6 +19,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 if ($env:DECKHAND_REPO) { $Repo = $env:DECKHAND_REPO }
@@ -42,6 +43,29 @@ $script:LastSkillSrc = $null
 
 function Write-Step([string]$msg) { Write-Host ">> $msg" }
 function Write-Hint([string]$msg) { Write-Host "   $msg" }
+
+function Save-Url([string]$url, [string]$outFile) {
+    $dir = Split-Path -Parent $outFile
+    if ($dir) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+    if ($curl) {
+        & curl.exe -fsSL --retry 3 --retry-delay 2 -A $ua -o $outFile $url
+        if ($LASTEXITCODE -ne 0) { throw "download failed: $url" }
+        return
+    }
+    Invoke-WebRequest -Uri $url -OutFile $outFile -UseBasicParsing -Headers @{ "User-Agent" = $ua }
+}
+
+function Stop-InstalledBinaries {
+    $procs = Get-Process -Name hub, hubd -ErrorAction SilentlyContinue
+    if (-not $procs) { return }
+    Write-Step "stopping running hub/hubd so files can be replaced"
+    $procs | ForEach-Object {
+        Write-Hint "$($_.ProcessName) pid=$($_.Id)"
+        Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+    }
+    Start-Sleep -Milliseconds 500
+}
 
 function Get-GoExe {
     $p = "C:\Program Files\Go\bin\go.exe"
@@ -83,6 +107,7 @@ function Copy-SkillIntoPrefix([string]$skillMd) {
 }
 
 function Install-FromDir([string]$src) {
+    Stop-InstalledBinaries
     New-Item -ItemType Directory -Force -Path $Prefix | Out-Null
     foreach ($name in @("hub.exe", "hubd.exe")) {
         $from = Join-Path $src $name
@@ -144,7 +169,7 @@ function Install-UserSkill {
             $url = "https://raw.githubusercontent.com/$Repo/main/skills/deckhand/SKILL.md"
             Write-Hint "download $url"
             $tmp = Join-Path $env:TEMP ("deckhand-skill-" + [guid]::NewGuid().ToString("N") + ".md")
-            Invoke-WebRequest -Uri $url -OutFile $tmp -UseBasicParsing -Headers @{ "User-Agent" = $ua }
+            Save-Url $url $tmp
             $src = $tmp
         }
         Copy-SkillIntoPrefix $src
@@ -195,7 +220,7 @@ function Install-FromRelease {
     try {
         $zip = Join-Path $tmp "deckhand-windows-amd64.zip"
         Write-Step "downloading $($rel.tag_name) ..."
-        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zip -UseBasicParsing -Headers @{ "User-Agent" = $ua }
+        Save-Url $asset.browser_download_url $zip
         $extract = Join-Path $tmp "extract"
         Expand-Zip $zip $extract
         $payload = Find-PayloadDir $extract
@@ -221,7 +246,7 @@ function Install-FromSource {
         $zip = Join-Path $tmp "src.zip"
         $srcUrl = "https://github.com/$Repo/archive/refs/heads/main.zip"
         Write-Step "downloading source $srcUrl"
-        Invoke-WebRequest -Uri $srcUrl -OutFile $zip -UseBasicParsing -Headers @{ "User-Agent" = $ua }
+        Save-Url $srcUrl $zip
         $extract = Join-Path $tmp "extract"
         Expand-Zip $zip $extract
         $root = Get-ChildItem -LiteralPath $extract -Directory | Select-Object -First 1
