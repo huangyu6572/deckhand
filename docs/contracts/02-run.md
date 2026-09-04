@@ -35,6 +35,7 @@ hub run [flags] <target> -- <command...>
 | `--sensitive` | 否 | 不把 command 写入 request 正文 |
 | `--script-file` | 否 | 本地脚本路径；用文件正文作为远端命令，避免 PowerShell 改写 |
 | `--shell` | 否 | `bash` / `sh` / `powershell` / `pwsh` / `raw`。空：看 shebang，否则 raw |
+| `--workdir` | 否 | 远端工作目录。Hub 先 `cd` 再执行。查询其他目录可以；写入/删除/`cd` 离开不得越出。yaml `workspace_root` 视为上限 |
 
 IPC `Job.Run` params：
 
@@ -47,6 +48,9 @@ IPC `Job.Run` params：
 | `jsonl` | bool | 否 |
 | `detach` | bool | 否 |
 | `sensitive` | bool | 否 |
+| `inspect` | string | 否 |
+| `workdir` | string | 否 |
+| `rm_confirmed` | bool | 否（仅 CLI 在真人键盘确认后设置；没有 `--yes`） |
 
 ## 输出（`--json`）
 

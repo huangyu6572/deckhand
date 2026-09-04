@@ -20,6 +20,10 @@ hub run --json --allow-public --script-file .\deploy.sh --shell bash cloud-172
 
 `--shell bash` 在 Go 里把脚本编成 `base64 | bash -s` 再发给 Linux；Windows 远端用 `--shell powershell`。简单命令仍用 `hub run --json <目标> -- uname -a`。
 
+用户指定了远端目录时加 `--workdir`（例如 `--workdir ~/sub-2-api`）。Hub 先 `cd` 再跑命令。可以 `ls`/`cat` 其他目录，但不能在目录外 `rm`/`mkdir`/`mv` 或 `>` 重定向。越界会 `FILE_OUTSIDE_WORKSPACE`。
+
+`rm` / `rmdir` 不会直接执行，也没有 `--yes`。必须在**真人交互终端**里输入 `DELETE <目标名>`。Agent 和 `--script-file` 都不能代确认。配方里禁止 `rm`。
+
 **禁止**在 argv 里写 `--password`（退出码 2）。密码用 `hub secret set`。
 
 ## 给 AI 的默认命令（优先用这些）
@@ -140,6 +144,7 @@ hub connection close <id或目标>
 | `JOB_NOT_FOUND` | `job wait` 的 ID 不对 |
 | `SESSION_NOT_FOUND` | session id/name 不对，或 hubd 重启后 SSH PTY 已关闭 |
 | `CAPABILITY_UNSUPPORTED` | 例如对 COM 口执行 `hub run`（串口用 `serial exec`） |
-| `DAEMON_INSTANCE_CONFLICT` | `hubd.exe` 缺失或未与 `hub.exe` 放一起 |
+| `DESTROY_NEEDS_HUMAN` | `rm` 必须本人在终端输入 `DELETE <目标>`；不要用脚本或 agent 确认 |
+| `FILE_OUTSIDE_WORKSPACE` | 路径超出 `--workdir` 或 yaml `workspace_root` |
 
 数据和日志在 `%LOCALAPPDATA%\LocalAIHub`，不是本程序目录。配置怎么写见 [配置说明.md](配置说明.md)。

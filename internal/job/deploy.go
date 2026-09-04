@@ -11,9 +11,11 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"localaihub/internal/destructive"
 	"localaihub/internal/storage"
 	"localaihub/internal/transport/contract"
 	"localaihub/internal/wire"
+	"localaihub/internal/workspace"
 )
 
 type Recipe struct {
@@ -36,7 +38,7 @@ type RecipeVerify struct {
 	Timeout string `yaml:"timeout"`
 }
 
-func (s *Service) Deploy(ctx context.Context, requestID, target, recipeName, artifact, idem string, timeout time.Duration, allowPublic bool) (wire.Result, error) {
+func (s *Service) Deploy(ctx context.Context, requestID, target, recipeName, artifact, idem string, timeout time.Duration, allowPublic bool, workdir string) (wire.Result, error) {
 	t, err := s.Resolve(ctx, target, allowPublic)
 	if err != nil {
 		return nil, err
@@ -60,6 +62,30 @@ func (s *Service) Deploy(ctx context.Context, requestID, target, recipeName, art
 	}
 	if rec.Verify.Type != "" && rec.Verify.Type != "command" {
 		return nil, wire.E("RECIPE_INVALID", "verify.type must be command")
+	}
+	var recipeText []string
+	recipeText = append(recipeText, rec.Precheck...)
+	recipeText = append(recipeText, rec.Apply...)
+	recipeText = append(recipeText, rec.Rollback...)
+	recipeText = append(recipeText, rec.Verify.Command)
+	for _, c := range recipeText {
+		if destructive.LooksLikeRm(c) {
+			return nil, wire.E("DESTROY_NEEDS_HUMAN", "recipe contains rm; hub will not delete from a recipe or script. A person must run hub run in a real terminal and type DELETE <target>")
+		}
+	}
+	wd, err := workspace.Confine(workdir, t.WorkspaceRoot)
+	if err != nil {
+		return nil, err
+	}
+	if wd != "" {
+		if rec.Upload.RemoteDir != "" && !workspace.Under(rec.Upload.RemoteDir, wd) {
+			return nil, wire.E("FILE_OUTSIDE_WORKSPACE", "recipe upload.remote_dir is outside --workdir")
+		}
+		for _, c := range recipeText {
+			if err := workspace.CheckCommand(c, wd); err != nil {
+				return nil, err
+			}
+		}
 	}
 	sum := sha256.Sum256(b)
 	recipeHash := hex.EncodeToString(sum[:])
@@ -121,6 +147,9 @@ func (s *Service) Deploy(ctx context.Context, requestID, target, recipeName, art
 	}
 
 	runCmd := func(cmd string, stepTimeout time.Duration) (int, error) {
+		if wd != "" {
+			cmd = workspace.Bind(cmd, wd)
+		}
 		cctx := jctx
 		var ccancel context.CancelFunc
 		if stepTimeout > 0 {

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"localaihub/internal/destructive"
 	"localaihub/internal/platform"
 	"localaihub/internal/wire"
 )
@@ -24,6 +26,7 @@ type globals struct {
 	AllowPublic bool
 	Detach      bool
 	Sensitive   bool
+	Workdir     string
 }
 
 func addGlobal(cmd *cobra.Command, g *globals) {
@@ -34,6 +37,7 @@ func addGlobal(cmd *cobra.Command, g *globals) {
 	cmd.Flags().BoolVar(&g.AllowPublic, "allow-public", false, "allow non-intranet targets")
 	cmd.Flags().BoolVar(&g.Detach, "detach", false, "return job id immediately")
 	cmd.Flags().BoolVar(&g.Sensitive, "sensitive", false, "do not persist command body")
+	cmd.Flags().StringVar(&g.Workdir, "workdir", "", "confine remote commands and files to this directory")
 }
 
 func timeoutMS(g *globals) int64 {
@@ -82,17 +86,24 @@ func Root() *cobra.Command {
 			if timeoutMS(&g) < 0 {
 				return exitErr(wire.E("INVALID_ARGUMENT", "invalid --timeout"), &g)
 			}
-			target, command, warn, err := prepareRunCommand(args, scriptFile, runShell)
+			target, command, inspect, warn, err := prepareRunCommand(args, scriptFile, runShell)
 			if err != nil {
+				return exitErr(err, &g)
+			}
+			if err := confirmIfRm(target, inspect); err != nil {
 				return exitErr(err, &g)
 			}
 			if warn != "" && !g.Quiet {
 				fmt.Fprintln(os.Stderr, "hub:", warn)
 			}
 			params := map[string]any{
-				"target": target, "command": command,
+				"target": target, "command": command, "inspect": inspect,
 				"timeout_ms": timeoutMS(&g), "allow_public": g.AllowPublic,
 				"jsonl": g.JSONL, "detach": g.Detach, "sensitive": g.Sensitive,
+				"workdir": g.Workdir,
+			}
+			if destructive.LooksLikeRm(inspect) {
+				params["rm_confirmed"] = true
 			}
 			return call(cmd.Context(), wire.JobRun, params, &g, true)
 		},
@@ -109,7 +120,7 @@ func Root() *cobra.Command {
 			if len(args) != 2 {
 				return exitErr(wire.E("INVALID_ARGUMENT", "cp requires <src> <dst>"), &g)
 			}
-			params := map[string]any{"src": args[0], "dst": args[1], "timeout_ms": timeoutMS(&g), "allow_public": g.AllowPublic}
+			params := map[string]any{"src": args[0], "dst": args[1], "timeout_ms": timeoutMS(&g), "allow_public": g.AllowPublic, "workdir": g.Workdir}
 			return call(cmd.Context(), wire.FileCopy, params, &g, false)
 		},
 	}
@@ -149,7 +160,7 @@ func Root() *cobra.Command {
 			if recipe == "" || artifact == "" {
 				return exitErr(wire.E("INVALID_ARGUMENT", "--recipe and --artifact are required"), &g)
 			}
-			params := map[string]any{"target": args[0], "recipe": recipe, "artifact": artifact, "idempotency_key": idem, "timeout_ms": timeoutMS(&g), "allow_public": g.AllowPublic}
+			params := map[string]any{"target": args[0], "recipe": recipe, "artifact": artifact, "idempotency_key": idem, "timeout_ms": timeoutMS(&g), "allow_public": g.AllowPublic, "workdir": g.Workdir}
 			return call(cmd.Context(), wire.DeployStart, params, &g, false)
 		},
 	}
@@ -205,7 +216,15 @@ func Root() *cobra.Command {
 		if len(args) < 2 {
 			return exitErr(wire.E("INVALID_ARGUMENT", "command required"), &g)
 		}
-		return call(cmd.Context(), wire.SessionExec, map[string]any{"session_id": args[0], "command": strings.Join(args[1:], " "), "timeout_ms": timeoutMS(&g), "no_sentinel": noSentinel}, &g, false)
+		command := strings.Join(args[1:], " ")
+		if err := confirmIfRm(args[0], command); err != nil {
+			return exitErr(err, &g)
+		}
+		params := map[string]any{"session_id": args[0], "command": command, "inspect": command, "timeout_ms": timeoutMS(&g), "no_sentinel": noSentinel, "workdir": g.Workdir}
+		if destructive.LooksLikeRm(command) {
+			params["rm_confirmed"] = true
+		}
+		return call(cmd.Context(), wire.SessionExec, params, &g, false)
 	}}
 	sex.Flags().BoolVar(&noSentinel, "no-sentinel", false, "do not wrap with exit sentinel")
 	addGlobal(sex, &g)
@@ -228,12 +247,24 @@ func Root() *cobra.Command {
 	addGlobal(sread, &g)
 	swrite := &cobra.Command{Use: "write [flags] <session> -- <data>", Args: cobra.MinimumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		params := map[string]any{"session_id": args[0]}
+		inspect := ""
 		if writeB64 != "" {
 			params["data_base64"] = writeB64
+			if raw, err := base64.StdEncoding.DecodeString(writeB64); err == nil {
+				inspect = string(raw)
+			}
 		} else if len(args) > 1 {
-			params["data"] = strings.Join(args[1:], " ")
+			inspect = strings.Join(args[1:], " ")
+			params["data"] = inspect
 		} else {
 			params["data"] = ""
+		}
+		if err := confirmIfRm(args[0], inspect); err != nil {
+			return exitErr(err, &g)
+		}
+		if destructive.LooksLikeRm(inspect) {
+			params["rm_confirmed"] = true
+			params["inspect"] = inspect
 		}
 		return call(cmd.Context(), wire.SessionWrite, params, &g, false)
 	}}

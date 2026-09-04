@@ -14,11 +14,13 @@ import (
 	"time"
 
 	"localaihub/internal/config"
+	"localaihub/internal/destructive"
 	"localaihub/internal/log"
 	"localaihub/internal/storage"
 	"localaihub/internal/transport/contract"
 	"localaihub/internal/transport/pool"
 	"localaihub/internal/wire"
+	"localaihub/internal/workspace"
 )
 
 type liveSess struct {
@@ -254,10 +256,27 @@ func (s *Service) resolveRow(ctx context.Context, id string) (*storage.Session, 
 	return row, nil
 }
 
-func (s *Service) Exec(ctx context.Context, requestID, sess, command string, timeout time.Duration, noSentinel bool) (wire.Result, error) {
+func (s *Service) Exec(ctx context.Context, requestID, sess, command string, timeout time.Duration, noSentinel, rmConfirmed bool, workdir string) (wire.Result, error) {
+	if err := destructive.RefuseUnlessConfirmed(command, rmConfirmed); err != nil {
+		return nil, err
+	}
 	ls, err := s.getLive(sess)
 	if err != nil {
 		return nil, err
+	}
+	yamlRoot := ""
+	if ls.target != nil {
+		yamlRoot = ls.target.WorkspaceRoot
+	}
+	wd, err := workspace.Confine(workdir, yamlRoot)
+	if err != nil {
+		return nil, err
+	}
+	if err := workspace.CheckCommand(command, wd); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(wd) != "" {
+		command = "mkdir -p -- " + workspace.ShellPath(wd) + " && cd -- " + workspace.ShellPath(wd) + " || exit 1; " + command
 	}
 	if ls.pty == nil {
 		return nil, wire.E("CAPABILITY_UNSUPPORTED", "session exec requires SSH PTY")
@@ -336,7 +355,7 @@ func mapStatus(ok bool) string {
 	return "failed"
 }
 
-func (s *Service) Write(ctx context.Context, requestID, sess, data, dataB64 string) (wire.Result, error) {
+func (s *Service) Write(ctx context.Context, requestID, sess, data, dataB64 string, rmConfirmed bool) (wire.Result, error) {
 	_ = ctx
 	raw := []byte(data)
 	if dataB64 != "" {
@@ -345,6 +364,9 @@ func (s *Service) Write(ctx context.Context, requestID, sess, data, dataB64 stri
 			return nil, wire.E("INVALID_ARGUMENT", "invalid --bytes-b64")
 		}
 		raw = b
+	}
+	if err := destructive.RefuseUnlessConfirmed(string(raw), rmConfirmed); err != nil {
+		return nil, err
 	}
 	ls, err := s.getLive(sess)
 	if err != nil {

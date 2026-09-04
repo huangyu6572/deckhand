@@ -25,6 +25,7 @@ hub <verb> [object] [flags] [--] [payload...]
 | `--allow-public` | bool | false | 允许本次公网 |
 | `--detach` | bool | false | 立即返回 ID |
 | `--sensitive` | bool | false | 命令/payload 不写入 request 正文 |
+| `--workdir` | string | 空 | 远端工作目录。Hub 先 cd。查询其他目录可以；写入/删除/`cd` 离开不得越出 |
 
 Duration：Go `time.ParseDuration`。非法 → 退出 2，`INVALID_ARGUMENT`。
 
@@ -75,6 +76,7 @@ Duration：Go `time.ParseDuration`。非法 → 退出 2，`INVALID_ARGUMENT`。
 | `TARGET_DISABLED` | 1 | false | |
 | `SCOPE_NOT_INTRANET` | 1 | false | |
 | `OPENSSH_UNSUPPORTED` | 2 | false | 关键 ssh_config 不支持 |
+| `DESTROY_NEEDS_HUMAN` | 2 | false | `rm` 需真人 TTY 输入 `DELETE <target>`；无 `--yes` |
 | `CAPABILITY_UNSUPPORTED` | 1 | false | |
 | `HOST_KEY_CHANGED` | 1 | false | |
 | `AUTH_FAILED` | 1 | false | |

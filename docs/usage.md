@@ -97,6 +97,10 @@ hub job list --json
 hub target list --json
 ```
 
+指定远端工作目录时加 `--workdir ~/sub-2-api`。Hub 自己 `cd` 进去。`ls`/`cat`/`find` 可以看别的目录；`rm`/`mkdir`/`mv`/`cp`/`touch`/`chmod`、`cd ..`、以及 `>` 写到目录外会返回 `FILE_OUTSIDE_WORKSPACE`。`hub cp` 的远端路径必须落在工作目录内。
+
+`rm` 没有 `--yes`，必须在真人终端输入 `DELETE <目标>`。
+
 公网地址默认拒绝。要出网时加 `--allow-public`，或在 `settings.yaml` 把 `network.scope` 改成 `all`。
 
 ## 4. 输出与退出码
@@ -138,6 +142,8 @@ hub secret set dev-web
 | `JOB_NOT_FOUND` | `job wait` 的 id 不对 |
 | `CAPABILITY_UNSUPPORTED` | 例如对 COM 口执行 `hub run` |
 | `DAEMON_INSTANCE_CONFLICT` | `hubd.exe` 不在 `hub.exe` 同目录，或权限/完整性级别不匹配 |
+| `FILE_OUTSIDE_WORKSPACE` | 查询目录外可以；不要在 `--workdir` 外写入或删除 |
+| `DESTROY_NEEDS_HUMAN` | `rm` 必须本人在终端输入 `DELETE <目标>` |
 
 数据与日志：`%LOCALAPPDATA%\LocalAIHub`（配置、SQLite、`logs/operations/`）。字段级契约：[`contracts/`](contracts/README.md)。
 

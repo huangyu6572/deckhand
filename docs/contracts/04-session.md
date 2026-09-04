@@ -26,6 +26,8 @@ hub session exec [flags] <session> -- <command...>
 
 `--no-sentinel`：无可靠 exit。超时无标记：`JOB_TIMEOUT`，不得假 `exit_code=0`。
 
+`--workdir`：Hub 先 `cd`；查询其他目录可以，写入/删除/`cd` 离开不得越出。
+
 `false`：`ok=false`，`REMOTE_EXIT_NONZERO` 或解析到的非零码。
 
 未知 session：`SESSION_NOT_FOUND`（不是 `INVALID_ARGUMENT`）。

@@ -50,7 +50,7 @@ func failStatus(code string) string {
 
 func ExitCode(code string) int {
 	switch code {
-	case "INVALID_ARGUMENT", "CONFIG_INVALID", "RECIPE_INVALID", "RECIPE_NOT_FOUND", "OPENSSH_UNSUPPORTED":
+	case "INVALID_ARGUMENT", "CONFIG_INVALID", "RECIPE_INVALID", "RECIPE_NOT_FOUND", "OPENSSH_UNSUPPORTED", "DESTROY_NEEDS_HUMAN":
 		return 2
 	case "IPC_PROTOCOL_ERROR", "DAEMON_INSTANCE_CONFLICT":
 		return 3

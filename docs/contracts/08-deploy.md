@@ -32,7 +32,7 @@ rollback:
 
 V1 **`verify.type` 只允许 `command`**，且 **始终在 SSH 目标内** `Job.Run` 语义执行。不从 Windows 发起 HTTP/TCP。遇错即停。全局 `--timeout`（默认 30m）包整次部署；步骤 `verify.timeout` 只约束 verify 命令。
 
-命令字符串按原样发送，无占位符展开（artifact 路径写死在 Recipe 或与 `upload.remote_dir/name` 一致）。
+命令字符串按原样发送，无占位符展开（artifact 路径写死在 Recipe 或与 `upload.remote_dir/name` 一致）。配方命令不得含 `rm`。`--workdir` 时 upload 与命令不得越界。
 
 `--idempotency-key`：键 `(target_identity, recipe, key)`。指纹含 recipe_hash + artifact sha。同 key 不同指纹 → `IDEMPOTENCY_CONFLICT`。同指纹且已 succeeded → 返回原 `job_`，不二次 apply。并发同 key：等待或复用，禁止双 apply。
 

@@ -61,7 +61,7 @@ func TestPrepareRunCommandScriptFile(t *testing.T) {
 	if err := os.WriteFile(p, []byte("#!/bin/bash\ncd /tmp && pwd\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	target, cmd, _, err := prepareRunCommand([]string{"dev-web"}, p, "")
+	target, cmd, _, _, err := prepareRunCommand([]string{"dev-web"}, p, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,9 +74,22 @@ func TestPrepareRunCommandScriptFile(t *testing.T) {
 }
 
 func TestPrepareRunCommandRejectsMangled(t *testing.T) {
-	_, _, _, err := prepareRunCommand([]string{"t", "bash", "-c", "set"}, "", "")
+	_, _, _, _, err := prepareRunCommand([]string{"t", "bash", "-c", "set"}, "", "")
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestPrepareRunCommandKeepsRmInInspect(t *testing.T) {
+	_, wrapped, inspect, _, err := prepareRunCommand([]string{"cloud-172", "rm", "-rf", "/tmp/x"}, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inspect != "rm -rf /tmp/x" {
+		t.Fatalf("inspect %q", inspect)
+	}
+	if strings.Contains(wrapped, "rm -rf") && wrapped != inspect {
+		t.Fatalf("raw wrap should be the body: %q", wrapped)
 	}
 }
 

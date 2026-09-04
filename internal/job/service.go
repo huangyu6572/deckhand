@@ -14,11 +14,13 @@ import (
 	"time"
 
 	"localaihub/internal/config"
+	"localaihub/internal/destructive"
 	"localaihub/internal/log"
 	"localaihub/internal/storage"
 	"localaihub/internal/transport/contract"
 	"localaihub/internal/transport/pool"
 	"localaihub/internal/wire"
+	"localaihub/internal/workspace"
 )
 
 type running struct {
@@ -56,19 +58,29 @@ func New(dataDir string, db *storage.DB, logs *logstore.Store, p *pool.Pool, lim
 }
 
 type RunReq struct {
-	Target      string
-	Command     string
-	Timeout     time.Duration
-	AllowPublic bool
-	JSONL       bool
-	Detach      bool
-	Sensitive   bool
-	RequestID   string
+	Target       string
+	Command      string
+	Inspect      string
+	Timeout      time.Duration
+	AllowPublic  bool
+	JSONL        bool
+	Detach       bool
+	Sensitive    bool
+	RequestID    string
+	RmConfirmed  bool
+	Workdir      string
 }
 
 func (s *Service) Run(ctx context.Context, req RunReq, emit func(wire.Event), stream bool) (wire.Result, error) {
 	if strings.TrimSpace(req.Command) == "" {
 		return nil, wire.E("INVALID_ARGUMENT", "command is required")
+	}
+	inspect := req.Inspect
+	if inspect == "" {
+		inspect = req.Command
+	}
+	if err := destructive.RefuseUnlessConfirmed(inspect+"\n"+req.Command, req.RmConfirmed); err != nil {
+		return nil, err
 	}
 	t, err := s.Resolve(ctx, req.Target, req.AllowPublic)
 	if err != nil {
@@ -76,6 +88,16 @@ func (s *Service) Run(ctx context.Context, req RunReq, emit func(wire.Event), st
 	}
 	if t.Transport != "ssh" {
 		return nil, wire.E("CAPABILITY_UNSUPPORTED", "hub run requires SSH exec")
+	}
+	wd, err := workspace.Confine(req.Workdir, t.WorkspaceRoot)
+	if err != nil {
+		return nil, err
+	}
+	if wd != "" {
+		if err := workspace.CheckCommand(inspect, wd); err != nil {
+			return nil, err
+		}
+		req.Command = workspace.Bind(inspect, wd)
 	}
 	timeout := req.Timeout
 	if timeout <= 0 {
@@ -144,7 +166,7 @@ func (s *Service) execRun(ctx context.Context, op *storage.Operation, w *logstor
 	_ = s.DB.Finish(context.Background(), op.ID, op.Version, state, code, &exit, w.Cursor(), false)
 }
 
-func (s *Service) Copy(ctx context.Context, requestID, src, dst string, timeout time.Duration, allowPublic bool) (wire.Result, error) {
+func (s *Service) Copy(ctx context.Context, requestID, src, dst string, timeout time.Duration, allowPublic bool, workdir string) (wire.Result, error) {
 	spec, err := parseCopy(src, dst)
 	if err != nil {
 		return nil, err
@@ -156,8 +178,12 @@ func (s *Service) Copy(ctx context.Context, requestID, src, dst string, timeout 
 	if t.Transport != "ssh" {
 		return nil, wire.E("CAPABILITY_UNSUPPORTED", "hub cp requires SSH/SFTP")
 	}
-	if t.WorkspaceRoot != "" && !underRoot(spec.Remote, t.WorkspaceRoot) {
-		return nil, wire.E("FILE_OUTSIDE_WORKSPACE", "remote path outside workspace_root")
+	wd, err := workspace.Confine(workdir, t.WorkspaceRoot)
+	if err != nil {
+		return nil, err
+	}
+	if wd != "" && !workspace.Under(spec.Remote, wd) {
+		return nil, wire.E("FILE_OUTSIDE_WORKSPACE", "remote path outside --workdir / workspace_root")
 	}
 	if timeout <= 0 {
 		timeout = t.DefaultTimeout
@@ -602,13 +628,7 @@ func splitRemote(p string) (target, remote string) {
 }
 
 func underRoot(remote, root string) bool {
-	r := filepath.Clean(filepath.FromSlash(remote))
-	rt := filepath.Clean(filepath.FromSlash(root))
-	rel, err := filepath.Rel(rt, r)
-	if err != nil {
-		return false
-	}
-	return rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
+	return workspace.Under(remote, root)
 }
 
 func shaFile(path string) (string, error) {

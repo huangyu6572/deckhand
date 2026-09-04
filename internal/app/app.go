@@ -212,9 +212,10 @@ func (a *App) dispatch(ctx context.Context, cancel context.CancelFunc, c net.Con
 	switch fr.Method {
 	case wire.JobRun:
 		req := job.RunReq{
-			Target: str("target"), Command: str("command"), Timeout: timeout,
-			AllowPublic: allow, JSONL: boolf("jsonl"), Detach: boolf("detach"),
-			Sensitive: boolf("sensitive"), RequestID: reqID,
+			Target: str("target"), Command: str("command"), Inspect: str("inspect"),
+			Timeout: timeout, AllowPublic: allow, JSONL: boolf("jsonl"), Detach: boolf("detach"),
+			Sensitive: boolf("sensitive"), RequestID: reqID, RmConfirmed: boolf("rm_confirmed"),
+			Workdir: str("workdir"),
 		}
 		var emit func(wire.Event)
 		if req.JSONL && !req.Detach {
@@ -239,7 +240,7 @@ func (a *App) dispatch(ctx context.Context, cancel context.CancelFunc, c net.Con
 		r, err := a.Jobs.List(ctx, reqID)
 		a.writeResult(c, reqID, r, err)
 	case wire.FileCopy:
-		r, err := a.Jobs.Copy(ctx, reqID, str("src"), str("dst"), timeout, allow)
+		r, err := a.Jobs.Copy(ctx, reqID, str("src"), str("dst"), timeout, allow, str("workdir"))
 		a.writeResult(c, reqID, r, err)
 	case wire.SerialExec:
 		r, err := a.Jobs.SerialExec(ctx, reqID, str("target"), str("payload"), str("wait"), timeout, int(int64f("baud")), allow)
@@ -254,7 +255,7 @@ func (a *App) dispatch(ctx context.Context, cancel context.CancelFunc, c net.Con
 		r["ports"] = ports
 		a.writeResult(c, reqID, r, nil)
 	case wire.DeployStart:
-		r, err := a.Jobs.Deploy(ctx, reqID, str("target"), str("recipe"), str("artifact"), str("idempotency_key"), timeout, allow)
+		r, err := a.Jobs.Deploy(ctx, reqID, str("target"), str("recipe"), str("artifact"), str("idempotency_key"), timeout, allow, str("workdir"))
 		a.writeResult(c, reqID, r, err)
 	case wire.TargetList:
 		names := make([]map[string]any, 0)
@@ -268,14 +269,14 @@ func (a *App) dispatch(ctx context.Context, cancel context.CancelFunc, c net.Con
 		r, err := a.Sess.Open(ctx, reqID, str("target"), str("name"), allow)
 		a.writeResult(c, reqID, r, err)
 	case wire.SessionExec:
-		r, err := a.Sess.Exec(ctx, reqID, str("session_id"), str("command"), timeout, boolf("no_sentinel"))
+		r, err := a.Sess.Exec(ctx, reqID, str("session_id"), str("command"), timeout, boolf("no_sentinel"), boolf("rm_confirmed"), str("workdir"))
 		a.writeResult(c, reqID, r, err)
 	case wire.SessionRead:
 		wait := time.Duration(int64f("wait_ms")) * time.Millisecond
 		r, err := a.Sess.Read(ctx, reqID, str("session_id"), int64f("after_cursor"), wait, boolf("bytes_b64"), boolf("jsonl"))
 		a.writeResult(c, reqID, r, err)
 	case wire.SessionWrite:
-		r, err := a.Sess.Write(ctx, reqID, str("session_id"), str("data"), str("data_base64"))
+		r, err := a.Sess.Write(ctx, reqID, str("session_id"), str("data"), str("data_base64"), boolf("rm_confirmed"))
 		a.writeResult(c, reqID, r, err)
 	case wire.SessionResize:
 		r, err := a.Sess.Resize(ctx, reqID, str("session_id"), int(int64f("cols")), int(int64f("rows")))
@@ -386,9 +387,16 @@ func (a *App) applyStreamInput(ctx context.Context, fr *wire.Frame) {
 		}
 		return 0
 	}
+	boolf := func(k string) bool {
+		if params == nil {
+			return false
+		}
+		v, _ := params[k].(bool)
+		return v
+	}
 	switch fr.Method {
 	case wire.SessionWrite:
-		_, _ = a.Sess.Write(ctx, fr.ID, str("session_id"), str("data"), str("data_base64"))
+		_, _ = a.Sess.Write(ctx, fr.ID, str("session_id"), str("data"), str("data_base64"), boolf("rm_confirmed"))
 	case wire.SessionResize:
 		_, _ = a.Sess.Resize(ctx, fr.ID, str("session_id"), int(int64f("cols")), int(int64f("rows")))
 	case wire.SessionDetach:

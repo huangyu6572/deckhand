@@ -12,24 +12,24 @@ import (
 
 const maxScriptBytes = 256 * 1024
 
-func prepareRunCommand(args []string, scriptFile, shell string) (target, command, warn string, err error) {
+func prepareRunCommand(args []string, scriptFile, shell string) (target, command, inspect, warn string, err error) {
 	if len(args) < 1 {
-		return "", "", "", wire.E("INVALID_ARGUMENT", "target is required")
+		return "", "", "", "", wire.E("INVALID_ARGUMENT", "target is required")
 	}
 	target = args[0]
 	var body string
 	if scriptFile != "" {
 		if len(args) > 1 {
-			return "", "", "", wire.E("INVALID_ARGUMENT", "do not combine --script-file with -- command")
+			return "", "", "", "", wire.E("INVALID_ARGUMENT", "do not combine --script-file with -- command")
 		}
 		b, rerr := os.ReadFile(scriptFile)
 		if rerr != nil {
-			return "", "", "", wire.Ef("INVALID_ARGUMENT", "script-file: %v", rerr)
+			return "", "", "", "", wire.Ef("INVALID_ARGUMENT", "script-file: %v", rerr)
 		}
 		body = strings.TrimPrefix(string(b), "\ufeff")
 	} else {
 		if len(args) < 2 {
-			return "", "", "", wire.E("INVALID_ARGUMENT", "command is required after --")
+			return "", "", "", "", wire.E("INVALID_ARGUMENT", "command is required after --")
 		}
 		rest := args[1:]
 		var extracted string
@@ -44,19 +44,19 @@ func prepareRunCommand(args []string, scriptFile, shell string) (target, command
 		}
 	}
 	if len(body) > maxScriptBytes {
-		return "", "", "", wire.E("INVALID_ARGUMENT", "script too large; hub cp the file then run the remote path")
+		return "", "", "", "", wire.E("INVALID_ARGUMENT", "script too large; hub cp the file then run the remote path")
 	}
 	if looksPowerShellMangled(body) {
-		return "", "", "", wire.E("INVALID_ARGUMENT", "command looks rewritten by PowerShell ($?, 2>&1, quotes); use --script-file and --shell bash or --shell powershell")
+		return "", "", "", "", wire.E("INVALID_ARGUMENT", "command looks rewritten by PowerShell ($?, 2>&1, quotes); use --script-file and --shell bash or --shell powershell")
 	}
 	if strings.TrimSpace(shell) == "" {
 		shell = shellFromShebang(body)
 	}
 	wrapped, werr := wrapRemoteCommand(shell, body)
 	if werr != nil {
-		return "", "", "", werr
+		return "", "", "", "", werr
 	}
-	return target, wrapped, warn, nil
+	return target, wrapped, body, warn, nil
 }
 
 func extractBashC(rest []string) (script, warn string) {

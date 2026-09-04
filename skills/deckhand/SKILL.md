@@ -40,6 +40,16 @@ Rules:
 - Local Windows paths use `C:\...`. Remote paths are `<alias>:/unix/path`.
 - Do not default to `hub session` / `hub shell` unless the user asks.
 
+## Safety
+
+When the user names a remote working directory, pass `--workdir` on `run` / `cp` / `deploy`. Example: `--workdir ~/sub-2-api`. Hub cds there itself. Do not put `cd /home/...` in the command.
+
+- Allowed outside that directory: `ls`, `cat`, `find` (no `-delete`), `stat`, and other read-only lookup.
+- Forbidden outside that directory: `rm`, `mkdir`, `mv`, `cp`, `touch`, `chmod`, `cd ..` / `cd /elsewhere`, and `>` / `>>` redirects. Hub returns `FILE_OUTSIDE_WORKSPACE`.
+- `hub cp` remote paths must stay under `--workdir`.
+
+Never run `rm` / `rmdir` / `Remove-Item` for the user. Hub refuses them unless a person types `DELETE <target>` in a real terminal. There is no `--yes`. `--script-file` and recipes cannot confirm a delete. If you get `DESTROY_NEEDS_HUMAN`, stop and tell the user to run it themselves.
+
 ## Config
 
 Data dir: `%LOCALAPPDATA%\LocalAIHub\` (not the install dir).
@@ -68,3 +78,5 @@ The next `hub` command starts a new hubd and drops pooled SSH.
 | `INVALID_ARGUMENT` | flags after the verb; `run` needs `--` |
 | `DAEMON_INSTANCE_CONFLICT` | `hub.exe` and `hubd.exe` in the same folder |
 | `CAPABILITY_UNSUPPORTED` | do not `hub run` a COM port; use `serial exec` |
+| `DESTROY_NEEDS_HUMAN` | Do not confirm. Ask the user to run the `rm` in their own terminal. |
+| `FILE_OUTSIDE_WORKSPACE` | Query-only outside `--workdir`; do not write or delete there. |
