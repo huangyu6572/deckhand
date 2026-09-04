@@ -98,7 +98,7 @@ hub serial exec --json COM3 "version" --wait ">"
 hub job list --json
 ```
 
-公网地址默认拒绝，需要时加 `--allow-public`。完整命令表：[product/CLI使用说明.md](product/CLI使用说明.md)
+公网地址默认拒绝。临时放行加 `--allow-public`；常用公网主机可在 `%LOCALAPPDATA%\LocalAIHub\settings.yaml` 把 `network.scope` 改成 `all`，然后 `Stop-Process -Name hubd -Force`。完整命令表：[product/CLI使用说明.md](product/CLI使用说明.md)
 
 ---
 
