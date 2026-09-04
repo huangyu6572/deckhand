@@ -476,6 +476,11 @@ func (s *Service) final(id, requestID string) wire.Result {
 		r["exit_code"] = nil
 	}
 	evs, _ := logstore.Replay(op.EventPath, 0)
+	if op.ErrorCode != "" {
+		if msg := completedMessage(evs); msg != "" {
+			r["message"] = msg
+		}
+	}
 	stdout, stderr := logstore.CollectStd(evs)
 	max := s.Limits.MaxResponseBytes
 	var trunc bool
@@ -507,6 +512,15 @@ func (s *Service) final(id, requestID string) wire.Result {
 		r["data"] = data.String()
 	}
 	return r
+}
+
+func completedMessage(evs []wire.Event) string {
+	for i := len(evs) - 1; i >= 0; i-- {
+		if evs[i].Type == "completed" && evs[i].Message != "" {
+			return evs[i].Message
+		}
+	}
+	return ""
 }
 
 func (s *Service) track(id string, cancel context.CancelFunc) {

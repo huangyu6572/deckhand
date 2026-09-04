@@ -62,7 +62,7 @@ The next `hub` command starts a new hubd and drops pooled SSH.
 | Code | Fix |
 |------|-----|
 | `SCOPE_NOT_INTRANET` | `--allow-public`, or `network.scope: all` + restart hubd |
-| `AUTH_FAILED` | ssh-agent, `key_path`, or `hub secret set` |
+| `AUTH_FAILED` | Read offered-key fingerprints in the message. Fix `key_path` / ssh-agent, or `hub secret set <name>` if the host also allows a password. |
 | `HOST_KEY_CHANGED` | inspect `%LOCALAPPDATA%\LocalAIHub\ssh\known_hosts` |
 | `TARGET_NOT_FOUND` | spelling; restart hubd after adding yaml |
 | `INVALID_ARGUMENT` | flags after the verb; `run` needs `--` |

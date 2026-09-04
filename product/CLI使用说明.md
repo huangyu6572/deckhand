@@ -134,7 +134,7 @@ hub connection close <id或目标>
 |------------|------|
 | `INVALID_ARGUMENT` | 参数放到动词后；`run` 必须有 `--` 和命令；不要用 `--password` |
 | `SCOPE_NOT_INTRANET` | 加 `--allow-public`，或改 settings 里 `network.scope` |
-| `AUTH_FAILED` | ssh-agent、私钥路径、或先 `hub secret set` |
+| `AUTH_FAILED` | 看返回里的公钥指纹和原始 SSH 错误；核对 `key_path` / ssh-agent；主机若还开密码则 `hub secret set <名字>` 后再试 |
 | `HOST_KEY_CHANGED` | 机器密钥变了，不会自动连 |
 | `TARGET_NOT_FOUND` | 检查别名 / `user@host` / `COM3` |
 | `JOB_NOT_FOUND` | `job wait` 的 ID 不对 |

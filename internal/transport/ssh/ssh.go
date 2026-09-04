@@ -10,7 +10,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/pkg/sftp"
@@ -18,7 +17,6 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 
 	"localaihub/internal/config"
-	"localaihub/internal/secrets"
 	"localaihub/internal/transport/contract"
 	"localaihub/internal/wire"
 )
@@ -45,7 +43,7 @@ func Dial(ctx context.Context, t *config.Resolved, opts contract.Options) (*Conn
 			jump.Close()
 			return nil, wire.Ef("REMOTE_UNREACHABLE", "jump dial: %v", err)
 		}
-		cfg, err := clientConfig(t, opts)
+		cfg, plan, err := clientConfig(t, opts)
 		if err != nil {
 			nc.Close()
 			jump.Close()
@@ -55,7 +53,7 @@ func Dial(ctx context.Context, t *config.Resolved, opts contract.Options) (*Conn
 		if err != nil {
 			nc.Close()
 			jump.Close()
-			return nil, mapSSHErr(err)
+			return nil, mapSSHErr(err, t, plan)
 		}
 		c := ssh.NewClient(cc, chans, reqs)
 		return &Conn{client: c, target: t, opts: opts}, nil
@@ -66,7 +64,7 @@ func Dial(ctx context.Context, t *config.Resolved, opts contract.Options) (*Conn
 	if err != nil {
 		return nil, wire.Ef("REMOTE_UNREACHABLE", "%v", err)
 	}
-	cfg, err := clientConfig(t, opts)
+	cfg, plan, err := clientConfig(t, opts)
 	if err != nil {
 		nc.Close()
 		return nil, err
@@ -74,7 +72,7 @@ func Dial(ctx context.Context, t *config.Resolved, opts contract.Options) (*Conn
 	cc, chans, reqs, err := ssh.NewClientConn(nc, t.Host, cfg)
 	if err != nil {
 		nc.Close()
-		return nil, mapSSHErr(err)
+		return nil, mapSSHErr(err, t, plan)
 	}
 	return &Conn{client: ssh.NewClient(cc, chans, reqs), target: t, opts: opts}, nil
 }
@@ -245,54 +243,17 @@ func (c *Conn) OpenPTY(ctx context.Context, cols, rows int) (contract.PTY, error
 	return &ptySession{sess: s, stdin: stdin, stdout: stdout}, nil
 }
 
-func clientConfig(t *config.Resolved, opts contract.Options) (*ssh.ClientConfig, error) {
-	auth, err := authMethods(t, opts)
+func clientConfig(t *config.Resolved, opts contract.Options) (*ssh.ClientConfig, *authPlan, error) {
+	plan, err := buildAuth(t)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	return &ssh.ClientConfig{
 		User:            t.User,
-		Auth:            auth,
+		Auth:            plan.methods,
 		HostKeyCallback: hostKeyCB(t, opts),
 		Timeout:         20 * time.Second,
-	}, nil
-}
-
-func authMethods(t *config.Resolved, opts contract.Options) ([]ssh.AuthMethod, error) {
-	switch {
-	case strings.HasPrefix(t.AuthRef, "key:"):
-		key, err := os.ReadFile(t.KeyPath)
-		if err != nil {
-			return nil, wire.E("AUTH_FAILED", err.Error())
-		}
-		signer, err := ssh.ParsePrivateKey(key)
-		if err != nil {
-			if _, ok := err.(*ssh.PassphraseMissingError); ok {
-				pw, perr := secrets.Get(t.Name)
-				if perr != nil {
-					return nil, wire.E("AUTH_FAILED", "key passphrase required")
-				}
-				signer, err = ssh.ParsePrivateKeyWithPassphrase(key, []byte(pw))
-			}
-			if err != nil {
-				return nil, wire.E("AUTH_FAILED", "invalid private key")
-			}
-		}
-		return []ssh.AuthMethod{ssh.PublicKeys(signer)}, nil
-	case strings.HasPrefix(t.AuthRef, "cred:"):
-		name := strings.TrimPrefix(t.AuthRef, "cred:")
-		pw, err := secrets.Get(name)
-		if err != nil {
-			return nil, wire.E("AUTH_FAILED", "password not set; run hub secret set")
-		}
-		return []ssh.AuthMethod{ssh.Password(pw)}, nil
-	default:
-		ag, err := sshAgent()
-		if err != nil {
-			return nil, wire.E("AUTH_FAILED", "ssh-agent not available")
-		}
-		return []ssh.AuthMethod{ssh.PublicKeysCallback(ag.Signers)}, nil
-	}
+	}, plan, nil
 }
 
 func hostKeyCB(t *config.Resolved, opts contract.Options) ssh.HostKeyCallback {
@@ -325,24 +286,6 @@ func hostKeyCB(t *config.Resolved, opts contract.Options) ssh.HostKeyCallback {
 		}
 		return nil
 	}
-}
-
-func mapSSHErr(err error) error {
-	if err == nil {
-		return nil
-	}
-	if e, ok := err.(*wire.Error); ok {
-		return e
-	}
-	msg := err.Error()
-	low := strings.ToLower(msg)
-	if strings.Contains(low, "unable to authenticate") || strings.Contains(low, "no supported methods") {
-		return wire.E("AUTH_FAILED", "authentication failed")
-	}
-	if strings.Contains(low, "host key") {
-		return wire.E("HOST_KEY_CHANGED", msg)
-	}
-	return wire.Ef("REMOTE_UNREACHABLE", "%v", err)
 }
 
 func sshAgent() (agent.Agent, error) {

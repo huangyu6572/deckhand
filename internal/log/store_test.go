@@ -61,3 +61,30 @@ func TestOpenResumesCursor(t *testing.T) {
 		t.Fatalf("%+v %v", ev, err)
 	}
 }
+
+func TestAppendCompletedKeepsMessage(t *testing.T) {
+	dir := t.TempDir()
+	s := New(1024, 1<<20)
+	w, err := s.Open(dir, "job_1", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev, err := w.Append("completed", "", map[string]any{
+		"state":      "failed",
+		"error_code": "AUTH_FAILED",
+		"message":    "authentication failed for u@h; offered keys: SHA256:abc",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ev.Message == "" || ev.ErrorCode != "AUTH_FAILED" {
+		t.Fatalf("in-memory event missing extra: %+v", ev)
+	}
+	replayed, err := Replay(w.Path(), 0)
+	if err != nil || len(replayed) != 1 {
+		t.Fatalf("replay %v %v", replayed, err)
+	}
+	if replayed[0].Message != ev.Message {
+		t.Fatalf("disk message %q", replayed[0].Message)
+	}
+}

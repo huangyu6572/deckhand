@@ -132,7 +132,7 @@ hub secret set dev-web
 |------------|--------|
 | `INVALID_ARGUMENT` | flag 放到动词后面；`run` 必须有 `-- 命令` |
 | `SCOPE_NOT_INTRANET` | 加 `--allow-public`，或改 `network.scope` |
-| `AUTH_FAILED` | 检查 ssh-agent / 私钥路径 / `hub secret set` |
+| `AUTH_FAILED` | 看返回里的公钥指纹；核对 ssh-agent / 私钥路径；主机若还开密码则 `hub secret set` |
 | `HOST_KEY_CHANGED` | 主机密钥变了，不会自动连；确认后再改 known_hosts |
 | `TARGET_NOT_FOUND` | 检查别名、`user@host`、或 `COM3` 写法 |
 | `JOB_NOT_FOUND` | `job wait` 的 id 不对 |

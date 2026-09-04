@@ -122,6 +122,17 @@ func (w *Writer) appendOne(typ, data string, extra map[string]any) (wire.Event, 
 	} else {
 		ev.Data = data
 	}
+	if extra != nil {
+		if v, ok := extra["error_code"].(string); ok {
+			ev.ErrorCode = v
+		}
+		if v, ok := extra["message"].(string); ok {
+			ev.Message = v
+		}
+		if v, ok := extra["state"].(string); ok {
+			ev.State = v
+		}
+	}
 	b, err := json.Marshal(mergeEvent(ev, extra))
 	if err != nil {
 		w.cursor--
