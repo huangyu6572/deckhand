@@ -8,12 +8,20 @@
 2. 写出默认 `settings.yaml` / `connections.yaml`
 3. 拉起当前用户的 `hubd.exe`（单实例，一般不用管）
 
-## 1. 构建
+## 1. 安装 / 构建
 
-需要 Go 1.24+（PATH 里有 `go`，常见路径 `C:\Program Files\Go\bin`）。对外目录是 `product/`：
+**别人机器（推荐）** 在 PowerShell 一键安装，不必先装 Go：
+
+```powershell
+irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install.ps1 | iex
+```
+
+说明见 [install.md](install.md)。发布包在 [GitHub Releases](https://github.com/huangyu6572/deckhand/releases/latest)。
+
+**本机有源码时**需要 Go 1.24+（PATH 里有 `go`，常见路径 `C:\Program Files\Go\bin`）。对外目录是 `product/`：
 
 ```text
-powershell -File product\build.ps1
+powershell -File scripts\build.ps1
 ```
 
 只编译、不跑测试。若要先自检：

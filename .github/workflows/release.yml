@@ -1,0 +1,43 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag such as v0.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Pack
+        run: powershell -NoProfile -File scripts/pack-release.ps1
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $tag = $env:GITHUB_REF_NAME
+          } else {
+            $tag = $env:INPUT_VERSION
+          }
+          if (-not $tag) { throw "missing release tag" }
+          $exists = gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0 -and $exists) {
+            gh release upload $tag dist/deckhand-windows-amd64.zip scripts/install.ps1 --clobber
+          } else {
+            gh release create $tag dist/deckhand-windows-amd64.zip scripts/install.ps1 --title $tag --generate-notes --latest
+          }

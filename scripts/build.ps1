@@ -1,18 +1,13 @@
-# 在仓库根执行，或直接运行本脚本。产物写到本目录（product\）。
+# 在仓库根执行，或直接运行本脚本。产物写到 product\（exe + 使用说明，不含源码模板）。
 $ErrorActionPreference = "Stop"
-$product = $PSScriptRoot
-$root = Split-Path -Parent $product
+$root = Split-Path -Parent $PSScriptRoot
+$product = Join-Path $root "product"
 Set-Location $root
 
 $go = "C:\Program Files\Go\bin\go.exe"
 if (-not (Test-Path $go)) { $go = "go" }
 
 New-Item -ItemType Directory -Force -Path $product | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $product "configs\recipes") | Out-Null
-
-Copy-Item (Join-Path $root "configs\connections.example.yaml") (Join-Path $product "configs\connections.example.yaml") -Force
-Copy-Item (Join-Path $root "configs\settings.example.yaml") (Join-Path $product "configs\settings.example.yaml") -Force
-Copy-Item (Join-Path $root "configs\recipes\artifact-service.example.yaml") (Join-Path $product "configs\recipes\artifact-service.example.yaml") -Force
 
 Write-Host "building hub.exe ..."
 & $go build -o (Join-Path $product "hub.exe") ./cmd/hub
