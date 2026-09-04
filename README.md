@@ -30,14 +30,22 @@ PowerShell **整行粘贴**：
 irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install.ps1 | iex
 ```
 
-脚本会下载最新 Release（还没有 Release 且本机有 Go 时，改为拉源码编译），装到 `%LOCALAPPDATA%\Programs\Deckhand\`，并写入当前用户 PATH。装完**新开一个终端**再敲 `hub`。
+脚本会下载最新 Release（还没有 Release 且本机有 Go 时，改为拉源码编译），然后：
 
-指定安装目录、强制源码编译、或不改 PATH（装前先设，一行一个）：
+1. 把 `hub.exe` + `hubd.exe` 装到 `%LOCALAPPDATA%\Programs\Deckhand\`
+2. 把该目录写入**当前用户 PATH**（新开终端即可直接敲 `hub` / `hubd`）
+3. 写入用户环境变量 `DECKHAND_HOME`（指向安装目录）
+4. 把 AI Skill 装到 `%USERPROFILE%\.cursor\skills\deckhand\`（以及 `.agents` / `.copilot`）
+
+装完请**新开一个终端**（PATH 对当前窗口不一定生效）。Cursor 请**新开一轮对话**后再让助手调 `hub`。
+
+指定安装目录、强制源码编译、不改 PATH、或不装 Skill（装前先设，一行一个）：
 
 ```powershell
 $env:DECKHAND_PREFIX = "D:\Tools\Deckhand"
 $env:DECKHAND_FROM_SOURCE = "1"
 $env:DECKHAND_NO_PATH = "1"
+$env:DECKHAND_NO_SKILL = "1"
 irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install.ps1 | iex
 ```
 
@@ -96,19 +104,15 @@ hub job list --json
 
 ## 给本地 AI
 
-把安装目录中的 **`hub.exe`** 设为允许执行的命令（与 `hubd.exe` 必须同目录）。再装仓库里的 Skill，助手就会按正确语法调 `hub`：
+上面那条一键安装**已经**把 Skill 放到 Cursor / Copilot 的用户 skill 目录，并把 `hub` 写进 PATH。只要把 **`hub.exe`** 设为允许执行（与 `hubd.exe` 同目录即可）。优先用上表几条默认命令，并带 `--json`。
+
+只补装 Skill、不重装 exe：
 
 ```powershell
 npx skills add huangyu6572/deckhand -g -y
 ```
 
-或不装 Node，PowerShell 整行粘贴：
-
-```powershell
-irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install-skill.ps1 | iex
-```
-
-会把 [`skills/deckhand/SKILL.md`](skills/deckhand/SKILL.md) 装到 `%USERPROFILE%\.cursor\skills\deckhand\`（以及 `.agents` / `.copilot`）。装完请**新开一轮对话**。优先用上表几条默认命令，并带 `--json`。
+或 `irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install-skill.ps1 | iex`。Skill 原文：[skills/deckhand/SKILL.md](skills/deckhand/SKILL.md)。
 
 ---
 

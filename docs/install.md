@@ -12,18 +12,28 @@ PowerShell：
 irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install.ps1 | iex
 ```
 
-默认安装到 `%LOCALAPPDATA%\Programs\Deckhand\`，并写入**当前用户 PATH**。装完请**新开终端**再执行 `hub`。
+默认安装到 `%LOCALAPPDATA%\Programs\Deckhand\`，并：
+
+- 把该目录写入**当前用户 PATH**（`hub` / `hubd` 可直接敲）
+- 写入用户环境变量 **`DECKHAND_HOME`**（等于安装目录）
+- 安装 AI Skill 到 `%USERPROFILE%\.cursor\skills\deckhand\`（以及 `.agents` / `.copilot`）
+
+装完请**新开终端**再执行 `hub`。PATH 和用户环境变量对当前窗口不一定生效。
 
 | 环境变量 | 作用 |
 |----------|------|
 | `DECKHAND_PREFIX` | 安装目录 |
 | `DECKHAND_VERSION` | Release 标签，默认 `latest` |
 | `DECKHAND_FROM_SOURCE` | `1`：不下载 zip，拉源码并用本机 Go 编译 |
-| `DECKHAND_NO_PATH` | `1`：不改 PATH |
+| `DECKHAND_NO_PATH` | `1`：不改 PATH（仍会写 `DECKHAND_HOME`） |
+| `DECKHAND_NO_SKILL` | `1`：不装 AI Skill |
 | `DECKHAND_REPO` | 默认 `huangyu6572/deckhand` |
 
 ```powershell
 $env:DECKHAND_PREFIX = "D:\Tools\Deckhand"
+$env:DECKHAND_FROM_SOURCE = "1"
+$env:DECKHAND_NO_PATH = "1"
+$env:DECKHAND_NO_SKILL = "1"
 irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install.ps1 | iex
 ```
 
@@ -54,17 +64,13 @@ hub target list --json
 
 配置在 `%LOCALAPPDATA%\LocalAIHub\`，不是安装目录。不要在 yaml 里写密码；需要时用 `hub secret set <名字>`。
 
-给本地 AI 装 Skill（Cursor / Copilot / 其它助手）：
+一键安装默认已经装好 Skill。只补装 Skill：
 
 ```powershell
 npx skills add huangyu6572/deckhand -g -y
 ```
 
-或不装 Node：
-
-```powershell
-irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install-skill.ps1 | iex
-```
+或不装 Node：`irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install-skill.ps1 | iex`
 
 命令：[../product/CLI使用说明.md](../product/CLI使用说明.md)。配置：[../product/配置说明.md](../product/配置说明.md)。Skill：[../skills/deckhand/SKILL.md](../skills/deckhand/SKILL.md)。
 

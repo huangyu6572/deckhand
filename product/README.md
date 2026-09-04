@@ -38,7 +38,7 @@ irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install.
 ## 对方机器上怎么开始
 
 1. 解压到任意目录，例如 `C:\Tools\Deckhand\`。
-2. （推荐）把该目录加入 PATH，或以后用全路径调用 `hub.exe`。
+2. （推荐）跑仓库一键安装，会把该目录写入用户 PATH，并设置 `DECKHAND_HOME`；或手动加入 PATH / 用全路径调用 `hub.exe`。
 3. 打开终端执行：
 
 ```text
@@ -47,10 +47,4 @@ hub run --json user@192.168.1.20 -- uname -a
 
 第一次运行会自动创建 `%LOCALAPPDATA%\LocalAIHub` 并启动 `hubd.exe`。远端只要已有 sshd 或 COM，**不要装插件**。
 
-给本地 AI 用时：在该产品里把 `hub.exe` 设为允许执行的命令，并装仓库 Skill：
-
-```powershell
-npx skills add huangyu6572/deckhand -g -y
-```
-
-或不装 Node：`irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install-skill.ps1 | iex`。命令表见 [CLI使用说明.md](CLI使用说明.md)。
+给本地 AI 用时：一键安装会把 Skill 装进 Cursor；把 `hub.exe` 设为允许执行即可。只补装 Skill：`npx skills add huangyu6572/deckhand -g -y`。命令表见 [CLI使用说明.md](CLI使用说明.md)。
