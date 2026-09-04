@@ -37,15 +37,16 @@ irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install.
 3. 写入用户环境变量 `DECKHAND_HOME`（指向安装目录）
 4. 把 AI Skill 装到 `%USERPROFILE%\.cursor\skills\deckhand\`（以及 `.agents` / `.copilot`）
 
-装完请**新开一个终端**（PATH 对当前窗口不一定生效）。Cursor 请**新开一轮对话**后再让助手调 `hub`。
+下载会显示进度；GitHub 过慢或卡住会自动换镜像。装完请**新开一个终端**（PATH 对当前窗口不一定生效）。Cursor 请**新开一轮对话**后再让助手调 `hub`。
 
-指定安装目录、强制源码编译、不改 PATH、或不装 Skill（装前先设，一行一个）：
+指定安装目录、强制源码编译、不改 PATH、不装 Skill、或指定镜像（装前先设，一行一个）：
 
 ```powershell
 $env:DECKHAND_PREFIX = "D:\Tools\Deckhand"
 $env:DECKHAND_FROM_SOURCE = "1"
 $env:DECKHAND_NO_PATH = "1"
 $env:DECKHAND_NO_SKILL = "1"
+$env:DECKHAND_MIRROR = "https://ghfast.top"
 irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install.ps1 | iex
 ```
 

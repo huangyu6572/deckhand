@@ -27,6 +27,7 @@ irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install.
 | `DECKHAND_FROM_SOURCE` | `1`：不下载 zip，拉源码并用本机 Go 编译 |
 | `DECKHAND_NO_PATH` | `1`：不改 PATH（仍会写 `DECKHAND_HOME`） |
 | `DECKHAND_NO_SKILL` | `1`：不装 AI Skill |
+| `DECKHAND_MIRROR` | GitHub 加速前缀，如 `https://ghfast.top`（会优先于内置镜像） |
 | `DECKHAND_REPO` | 默认 `huangyu6572/deckhand` |
 
 ```powershell
@@ -34,6 +35,7 @@ $env:DECKHAND_PREFIX = "D:\Tools\Deckhand"
 $env:DECKHAND_FROM_SOURCE = "1"
 $env:DECKHAND_NO_PATH = "1"
 $env:DECKHAND_NO_SKILL = "1"
+$env:DECKHAND_MIRROR = "https://ghfast.top"
 irm https://raw.githubusercontent.com/huangyu6572/deckhand/main/scripts/install.ps1 | iex
 ```
 

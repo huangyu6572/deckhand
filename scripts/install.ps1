@@ -44,16 +44,48 @@ $script:LastSkillSrc = $null
 function Write-Step([string]$msg) { Write-Host ">> $msg" }
 function Write-Hint([string]$msg) { Write-Host "   $msg" }
 
+function Get-UrlCandidates([string]$url) {
+    $out = New-Object System.Collections.Generic.List[string]
+    if ($env:DECKHAND_MIRROR) {
+        $out.Add(($env:DECKHAND_MIRROR.TrimEnd("/") + "/" + $url))
+    }
+    $out.Add($url)
+    foreach ($m in @("https://ghfast.top", "https://gh-proxy.com", "https://ghproxy.net")) {
+        $out.Add("$m/$url")
+    }
+    return $out
+}
+
+function Save-UrlOnce([string]$url, [string]$outFile) {
+    if (Test-Path $outFile) { Remove-Item -LiteralPath $outFile -Force }
+    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+    if ($curl) {
+        # no -s: show a progress bar. Stall ( <1KB/s for 20s ) or connect timeout aborts so we can try a mirror.
+        & curl.exe -fL --progress-bar --connect-timeout 15 --max-time 180 --retry 1 --retry-delay 1 --speed-limit 1024 --speed-time 20 -A $ua -o $outFile $url
+        if ($LASTEXITCODE -ne 0) { throw "curl exit $LASTEXITCODE" }
+    } else {
+        Invoke-WebRequest -Uri $url -OutFile $outFile -UseBasicParsing -TimeoutSec 180 -Headers @{ "User-Agent" = $ua }
+    }
+    if (-not (Test-Path $outFile) -or (Get-Item -LiteralPath $outFile).Length -le 0) {
+        throw "empty download"
+    }
+}
+
 function Save-Url([string]$url, [string]$outFile) {
     $dir = Split-Path -Parent $outFile
     if ($dir) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
-    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
-    if ($curl) {
-        & curl.exe -fsSL --retry 3 --retry-delay 2 -A $ua -o $outFile $url
-        if ($LASTEXITCODE -ne 0) { throw "download failed: $url" }
-        return
+    $last = $null
+    foreach ($u in (Get-UrlCandidates $url)) {
+        Write-Hint $u
+        try {
+            Save-UrlOnce $u $outFile
+            return
+        } catch {
+            $last = $_
+            Write-Hint ("failed: " + $_.Exception.Message)
+        }
     }
-    Invoke-WebRequest -Uri $url -OutFile $outFile -UseBasicParsing -Headers @{ "User-Agent" = $ua }
+    throw "download failed: $url ($last)"
 }
 
 function Stop-InstalledBinaries {
@@ -195,7 +227,7 @@ function Get-ReleaseJson {
         "$api/releases/tags/$Version"
     }
     try {
-        return Invoke-RestMethod -Uri $url -Headers $headers
+        return Invoke-RestMethod -Uri $url -Headers $headers -TimeoutSec 20
     } catch {
         $resp = $_.Exception.Response
         if ($resp -and [int]$resp.StatusCode -eq 404) { return $null }
@@ -203,24 +235,45 @@ function Get-ReleaseJson {
     }
 }
 
+function Get-ReleaseZipUrl {
+    $rel = $null
+    try { $rel = Get-ReleaseJson } catch {
+        Write-Hint ("release API: " + $_.Exception.Message)
+    }
+    $name = "deckhand-windows-amd64.zip"
+    if ($rel) {
+        $asset = $rel.assets | Where-Object { $_.name -eq $name } | Select-Object -First 1
+        if ($asset -and $asset.browser_download_url) {
+            return @{ Url = [string]$asset.browser_download_url; Tag = [string]$rel.tag_name }
+        }
+        if ($rel.tag_name) {
+            return @{ Url = "https://github.com/$Repo/releases/download/$($rel.tag_name)/$name"; Tag = [string]$rel.tag_name }
+        }
+    }
+    if ($Version -ne "latest") {
+        return @{ Url = "https://github.com/$Repo/releases/download/$Version/$name"; Tag = $Version }
+    }
+    return @{ Url = "https://github.com/$Repo/releases/latest/download/$name"; Tag = "latest" }
+}
+
 function Install-FromRelease {
     Write-Step "checking GitHub release ($Version) ..."
-    $rel = Get-ReleaseJson
-    if (-not $rel) {
+    $info = Get-ReleaseZipUrl
+    if (-not $info -or -not $info.Url) {
         Write-Hint "no release found"
-        return $false
-    }
-    $asset = $rel.assets | Where-Object { $_.name -eq "deckhand-windows-amd64.zip" } | Select-Object -First 1
-    if (-not $asset) {
-        Write-Hint "release $($rel.tag_name) has no deckhand-windows-amd64.zip"
         return $false
     }
     $tmp = Join-Path $env:TEMP ("deckhand-install-" + [guid]::NewGuid().ToString("N"))
     New-Item -ItemType Directory -Force -Path $tmp | Out-Null
     try {
         $zip = Join-Path $tmp "deckhand-windows-amd64.zip"
-        Write-Step "downloading $($rel.tag_name) ..."
-        Save-Url $asset.browser_download_url $zip
+        Write-Step "downloading $($info.Tag) (progress below; slow GitHub will switch mirror) ..."
+        try {
+            Save-Url $info.Url $zip
+        } catch {
+            Write-Hint $_.Exception.Message
+            return $false
+        }
         $extract = Join-Path $tmp "extract"
         Expand-Zip $zip $extract
         $payload = Find-PayloadDir $extract
