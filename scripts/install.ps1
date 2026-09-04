@@ -137,8 +137,13 @@ function Copy-SkillIntoPrefix([string]$skillMd) {
     if (-not $skillMd -or -not (Test-Path $skillMd)) { return }
     $destDir = Join-Path $Prefix "skills\deckhand"
     New-Item -ItemType Directory -Force -Path $destDir | Out-Null
-    Copy-Item -LiteralPath $skillMd -Destination (Join-Path $destDir "SKILL.md") -Force
-    $script:LastSkillSrc = Join-Path $destDir "SKILL.md"
+    $dest = Join-Path $destDir "SKILL.md"
+    $srcFull = (Resolve-Path -LiteralPath $skillMd).Path
+    $same = (Test-Path -LiteralPath $dest) -and ($srcFull -ieq (Resolve-Path -LiteralPath $dest).Path)
+    if (-not $same) {
+        Copy-Item -LiteralPath $skillMd -Destination $dest -Force
+    }
+    $script:LastSkillSrc = $dest
 }
 
 function Install-FromDir([string]$src) {
